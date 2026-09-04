@@ -1,0 +1,54 @@
+###############################################
+# Gujarat CCTV Hackathon 2026 — Stream Gateway config
+#
+# This relays camera streams (pulled by the sync service below via RTSP/
+# ONVIF-resolved URLs — see gateway_sync.py) out as HLS and WebRTC for the
+# dashboard, and as a normalised RTSP restream for the AI pipeline. This is
+# the "Stream Gateway" component of the HLD architecture (Section 4/10):
+# video transport is deliberately kept separate from the AI analytics path.
+###############################################
+
+logLevel: info
+logDestinations: [stdout]
+
+# Control API — used by gateway_sync.py to register/update camera paths
+# dynamically as cameras are onboarded, instead of static config.
+api: yes
+apiAddress: :9997
+
+# RTSP: both an ingest protocol (if a camera pushes) and our own restream
+# output that the AI worker can consume instead of hitting camera RTSP
+# endpoints directly — reduces load on source cameras under concurrency.
+rtsp: yes
+rtspAddress: :8554
+rtspTransports: [tcp]
+
+# HLS output for the dashboard's <video> player (broad browser support,
+# a few seconds of latency — acceptable for a command-dashboard grid).
+hls: yes
+hlsAddress: :8888
+hlsAllowOrigins: ["*"]
+hlsVariant: fmp4
+
+# WebRTC output — lower latency option, used where sub-second matters.
+webrtc: yes
+webrtcAddress: :8889
+webrtcAllowOrigins: ["*"]
+
+# No paths are statically defined — every camera path is registered at
+# runtime by gateway_sync.py based on the Registry & GIS service's camera
+# list. This is what keeps the gateway vendor/camera-count agnostic.
+#
+# rtspTransport (singular) below is the default transport MediaMTX uses
+# when PULLING from an RTSP source (e.g. a real camera) — distinct from
+# rtspTransports (plural, above) which governs what OUR OWN RTSP server
+# accepts from readers like the AI worker. Left on "automatic", MediaMTX
+# will try UDP before falling back to TCP, which is exactly the failure
+# mode the Sentinel Camera Grid integration reference warns against
+# ("UDP is accepted but fails across NAT and most corporate firewalls...
+# produces corrupt frames that look like model bugs"). gateway_sync.py
+# also sets this explicitly per-path when registering cameras, as
+# belt-and-suspenders — this default covers any path added another way.
+rtspTransport: tcp
+
+paths: {}

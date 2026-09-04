@@ -1,0 +1,96 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgis/postgis:15-3.4
+    container_name: cctv_postgis
+    environment:
+      POSTGRES_USER: cctv_user
+      POSTGRES_PASSWORD: cctv_pass
+      POSTGRES_DB: cctv_platform
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cctv_user -d cctv_platform"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: cctv_redis
+    ports:
+      - "6379:6379"
+
+  backend:
+    build: ./backend
+    container_name: cctv_backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://cctv_user:cctv_pass@db:5432/cctv_platform"
+      JWT_SECRET_KEY: "${JWT_SECRET_KEY:?set a real secret in .env for anything beyond local dev}"
+      AI_WORKER_API_KEY: "${AI_WORKER_API_KEY:?set a real key in .env for anything beyond local dev}"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  ai-worker:
+    build: ./ai-worker
+    container_name: cctv_ai_worker
+    depends_on:
+      - backend
+    environment:
+      BACKEND_BASE_URL: "http://backend:8000/api/v1"
+      AI_WORKER_API_KEY: "${AI_WORKER_API_KEY:?set a real key in .env for anything beyond local dev}"
+      SAMPLE_FPS: "5"
+      DETECTION_CONFIDENCE_THRESHOLD: "0.5"
+      OCR_CONFIDENCE_THRESHOLD: "0.60"
+    volumes:
+      - ./ai-worker:/app
+
+  stream-gateway:
+    build: ./stream-gateway
+    container_name: cctv_stream_gateway
+    ports:
+      - "8554:8554"   # RTSP (consumed by ai-worker instead of hitting cameras directly, if desired)
+      - "8888:8888"   # HLS
+      - "8889:8889"   # WebRTC
+      - "9997:9997"   # control API (internal use by gateway-sync only — do not expose publicly)
+
+  gateway-sync:
+    build:
+      context: ./stream-gateway
+      dockerfile: Dockerfile.sync
+    container_name: cctv_gateway_sync
+    depends_on:
+      - backend
+      - stream-gateway
+    environment:
+      BACKEND_BASE_URL: "http://backend:8000/api/v1"
+      MEDIAMTX_API_URL: "http://stream-gateway:9997"
+      AI_WORKER_API_KEY: "${AI_WORKER_API_KEY:?set a real key in .env for anything beyond local dev}"
+
+  dashboard:
+    build: ./dashboard
+    container_name: cctv_dashboard
+    depends_on:
+      - backend
+      - stream-gateway
+    environment:
+      VITE_BACKEND_PROXY_TARGET: "http://backend:8000"
+      VITE_STREAM_GATEWAY_PROXY_TARGET: "http://stream-gateway:8888"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./dashboard:/app
+      - /app/node_modules
+
+volumes:
+  pgdata:

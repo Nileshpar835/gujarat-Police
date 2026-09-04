@@ -1,0 +1,82 @@
+:root {
+  /* Command-room palette: low-glare dark base (long shifts, video walls),
+     desaturated slate surfaces, and functional severity colors that carry
+     real meaning rather than decoration. */
+  --bg-void: #0b0f14;
+  --bg-panel: #121822;
+  --bg-panel-raised: #182130;
+  --bg-hover: #1e293b;
+  --border-hairline: #253044;
+
+  --text-primary: #e7ecf3;
+  --text-secondary: #8b98ab;
+  --text-tertiary: #5b6b82;
+
+  --accent-active: #3dd6c4; /* live/active status */
+  --accent-active-dim: #14403b;
+
+  --severity-critical: #ef4444;
+  --severity-critical-dim: #3a1414;
+  --severity-high: #f59e0b;
+  --severity-high-dim: #3a2b0f;
+  --severity-medium: #eab308;
+  --severity-medium-dim: #35300d;
+  --severity-low: #64748b;
+  --severity-low-dim: #1f2733;
+
+  --font-ui: "Inter", -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "Roboto Mono", ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg-void);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+input {
+  font-family: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-active);
+  outline-offset: 1px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Leaflet dark-theme tuning: default tile attribution/controls read as a
+   bright white rectangle against a dark UI otherwise. */
+.leaflet-control-attribution {
+  background: rgba(11, 15, 20, 0.75) !important;
+  color: var(--text-tertiary) !important;
+}
+.leaflet-control-attribution a {
+  color: var(--text-secondary) !important;
+}
+.leaflet-control-zoom a {
+  background: var(--bg-panel-raised) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-hairline) !important;
+}

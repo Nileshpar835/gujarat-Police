@@ -1,0 +1,4 @@
+camera_code,name,department_id,protocol,stream_url,latitude,longitude,location_name,district
+AMD-TRF-001,Ashram Road Junction,REPLACE_WITH_DEPARTMENT_UUID,rtsp,rtsp://demo:demo@10.0.0.11:554/stream1,23.0272,72.5714,Ashram Road,Ahmedabad
+AMD-TRF-002,CG Road Signal,REPLACE_WITH_DEPARTMENT_UUID,rtsp,rtsp://demo:demo@10.0.0.12:554/stream1,23.0359,72.5595,CG Road,Ahmedabad
+SUR-TRF-001,Ring Road Junction,REPLACE_WITH_DEPARTMENT_UUID,onvif,,21.1702,72.8311,Ring Road,Surat
