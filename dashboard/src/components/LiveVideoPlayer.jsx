@@ -29,16 +29,21 @@ export default function LiveVideoPlayer({ cameraCode, streamGatewayBaseUrl }) {
       hlsRef.current = null;
     }
 
+    // Resolve camera identifier (e.g. SENTINEL-cam03 -> cam03)
+    const camId = cameraCode.replace(/^SENTINEL-/i, "").toLowerCase();
+    
     const src = `${streamGatewayBaseUrl}/${cameraCode}/index.m3u8`;
     setStatus("connecting");
 
     if (Hls.isSupported()) {
       const hls = new Hls({
         lowLatencyMode: true,
-        // Retry manifest load a few times before giving up — gateway_sync
-        // may take up to 30s to register a newly-activated camera path.
-        manifestLoadingMaxRetry: 3,
-        manifestLoadingRetryDelay: 2000,
+        manifestLoadingMaxRetry: 4,
+        manifestLoadingRetryDelay: 1500,
+        xhrSetup: (xhr, url) => {
+          // Pass credentials so authenticated Sentinel sessions work seamlessly
+          xhr.withCredentials = true;
+        },
       });
       hlsRef.current = hls;
       hls.loadSource(src);
@@ -53,6 +58,11 @@ export default function LiveVideoPlayer({ cameraCode, streamGatewayBaseUrl }) {
 
       hls.on(Hls.Events.ERROR, (_evt, data) => {
         if (data.fatal) {
+          // If direct Sentinel stream fails (e.g. CORS), fallback to local gateway
+          if (src === sentinelUrl) {
+            hls.loadSource(localUrl);
+            return;
+          }
           setStatus("error");
           hls.destroy();
           hlsRef.current = null;

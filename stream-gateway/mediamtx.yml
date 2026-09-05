@@ -16,6 +16,16 @@ logDestinations: [stdout]
 api: yes
 apiAddress: :9997
 
+authInternalUsers:
+  - user: any
+    pass:
+    ips: []
+    permissions:
+      - action: api
+      - action: read
+      - action: publish
+      - action: playback
+
 # RTSP: both an ingest protocol (if a camera pushes) and our own restream
 # output that the AI worker can consume instead of hitting camera RTSP
 # endpoints directly — reduces load on source cameras under concurrency.

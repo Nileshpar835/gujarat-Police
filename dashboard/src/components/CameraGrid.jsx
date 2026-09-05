@@ -2,9 +2,10 @@ import { useState } from "react";
 import LiveVideoPlayer from "./LiveVideoPlayer.jsx";
 
 const GRID_SIZES = [
-  { label: "2×2", cols: 2, max: 4 },
-  { label: "3×3", cols: 3, max: 9 },
-  { label: "1+5", cols: null, max: 6 }, // special layout
+  { label: "2×2 (4)", cols: 2, max: 4 },
+  { label: "3×3 (9)", cols: 3, max: 9 },
+  { label: "4×4 (16)", cols: 4, max: 16 },
+  { label: "All 30", cols: 5, max: 30 },
 ];
 
 export default function CameraGrid({ cameras, streamGatewayBaseUrl }) {
@@ -44,6 +45,20 @@ export default function CameraGrid({ cameras, streamGatewayBaseUrl }) {
     setActiveSlot(null);
   };
 
+  const handleFillAll = () => {
+    const newSlots = Array(gridSize.max).fill(null);
+    activeCameras.slice(0, gridSize.max).forEach((cam, i) => {
+      newSlots[i] = cam;
+    });
+    setSlots(newSlots);
+    setActiveSlot(null);
+  };
+
+  const handleClearAll = () => {
+    setSlots(Array(gridSize.max).fill(null));
+    setActiveSlot(null);
+  };
+
   const cols = gridSize.cols || 3;
 
   return (
@@ -73,6 +88,28 @@ export default function CameraGrid({ cameras, streamGatewayBaseUrl }) {
               {gs.label}
             </button>
           ))}
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button
+            onClick={handleFillAll}
+            style={{
+              fontSize: 11, padding: "3px 10px",
+              background: "#164e63", border: "1px solid #0891b2",
+              borderRadius: 4, color: "#67e8f9", cursor: "pointer", fontWeight: 600,
+            }}
+          >
+            ⚡ Auto-Fill All ({activeCameras.length})
+          </button>
+          <button
+            onClick={handleClearAll}
+            style={{
+              fontSize: 11, padding: "3px 8px",
+              background: "var(--bg-panel-raised)", border: "1px solid var(--border-hairline)",
+              borderRadius: 4, color: "var(--text-tertiary)", cursor: "pointer",
+            }}
+          >
+            Clear
+          </button>
         </div>
         <span style={{ fontSize: 12, color: "var(--text-tertiary)", marginLeft: "auto" }}>
           {activeSlot !== null
