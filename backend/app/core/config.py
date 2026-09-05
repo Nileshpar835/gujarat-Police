@@ -1,7 +1,9 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
     # Database
     database_url: str = "postgresql+asyncpg://cctv_user:cctv_pass@localhost:5432/cctv_platform"
 
@@ -23,9 +25,6 @@ class Settings(BaseSettings):
     # authenticates via a shared secret rather than logging in) — see
     # HLD Section 13, "service-to-service authentication".
     ai_worker_api_key: str = "CHANGE_ME_dev_only_ai_worker_key"
-
-    class Config:
-        env_file = ".env"
 
 
 settings = Settings()

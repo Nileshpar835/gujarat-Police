@@ -5,6 +5,10 @@ import react from "@vitejs/plugin-react";
 // is reachable as "backend", not "localhost").
 const backendTarget = process.env.VITE_BACKEND_PROXY_TARGET || "http://localhost:8000";
 const streamGatewayTarget = process.env.VITE_STREAM_GATEWAY_PROXY_TARGET || "http://localhost:8888";
+const sentinelHost = process.env.VITE_SENTINEL_HOST || "103.250.160.189";
+const sentinelTarget = sentinelHost.startsWith("http") ? sentinelHost : `http://${sentinelHost}`;
+const sentinelUser = process.env.VITE_SENTINEL_USERNAME || "";
+const sentinelPass = process.env.VITE_SENTINEL_PASSWORD || "";
 
 export default defineConfig({
   plugins: [react()],
@@ -50,6 +54,21 @@ export default defineConfig({
             // the proxy and 404s.
             if (proxyRes.headers.location && proxyRes.headers.location.startsWith("/")) {
               proxyRes.headers.location = "/hls" + proxyRes.headers.location;
+            }
+          });
+        },
+      },
+      // Official Sentinel HLS: http://<host>/live/stream/<id>/index.m3u8
+      // Browser cannot attach RTSP basic-auth, so we proxy with credentials here.
+      "/sentinel-live": {
+        target: sentinelTarget,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/sentinel-live/, ""),
+        configure: (proxy) => {
+          proxy.on("proxyReq", (proxyReq) => {
+            if (sentinelUser) {
+              const token = Buffer.from(`${sentinelUser}:${sentinelPass}`).toString("base64");
+              proxyReq.setHeader("Authorization", `Basic ${token}`);
             }
           });
         },

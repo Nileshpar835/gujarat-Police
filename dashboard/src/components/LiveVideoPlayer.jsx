@@ -13,13 +13,11 @@ import Hls from "hls.js";
  *   - Memory Cleanup: Destroys HLS instance & releases decoders when hidden or unmounted
  */
 
-const SENTINEL_CDN_BASE = "https://cctv.corp8.cloud";
-
 function buildSources(cameraCode, gatewayBase) {
-  const camId = cameraCode.replace(/^SENTINEL-/i, "").toLowerCase();
+  const camId = cameraCode.replace(/^SENTINEL-/i, "");
   return [
-    `${gatewayBase}/${cameraCode}/index.m3u8`,      // Primary: Local Stream Gateway
-    `${SENTINEL_CDN_BASE}/${camId}/index.m3u8`,     // Fallback: Sentinel CDN
+    `${gatewayBase}/${cameraCode}/index.m3u8`,
+    `/sentinel-live/live/stream/${camId}/index.m3u8`,
   ];
 }
 
@@ -256,7 +254,7 @@ export default function LiveVideoPlayer({
                 }}
               />
               <div style={{ fontSize: 11, color: "#5c6b86" }}>
-                {sourceIdx === 0 ? "Connecting on-demand…" : "Connecting CDN fallback…"}
+                {sourceIdx === 0 ? "Connecting on-demand…" : "Connecting Sentinel HLS…"}
               </div>
               <div className="mono" style={{ fontSize: 10, color: "#3a4a5c" }}>{cameraCode}</div>
             </>
@@ -347,7 +345,7 @@ export default function LiveVideoPlayer({
               color: "#c4b5fd",
             }}
           >
-            CDN
+            HLS
           </div>
         )}
         {status === "live" && (

@@ -3,9 +3,15 @@ import cv2
 from detector import VehicleDetector
 from anpr import read_plate
 
-os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;tcp'
-url = 'rtsp://nileshpar835%40gmail.com:NYA4-3ND8-4PGV@103.250.160.189:8554/stream/cam01'
-print('Connecting to:', url)
+from urllib.parse import quote
+
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
+host = os.getenv("SENTINEL_HOST", "103.250.160.189")
+user = quote(os.getenv("SENTINEL_USERNAME", ""), safe="")
+password = quote(os.getenv("SENTINEL_PASSWORD", ""), safe="")
+cam = os.getenv("SENTINEL_TEST_CAMERA", "cam01")
+url = f"rtsp://{user}:{password}@{host}:8554/stream/{cam}" if user and password else f"rtsp://{host}:8554/stream/{cam}"
+print("Connecting to:", url.split("@")[-1])
 cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
 ok, frame = cap.read()
 if not ok:

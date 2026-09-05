@@ -1,13 +1,20 @@
-import { useState } from "react";
-import { searchVehicles, getVehicleRoute } from "../api.js";
+import { useEffect, useState } from "react";
+import { searchVehicles, getVehicleRoute, getRecentDetections } from "../api.js";
 
 export default function DetectionHistory({ onShowRoute }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
+  const [recent, setRecent] = useState([]);
   const [routeData, setRouteData] = useState(null);
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [loadingRoute, setLoadingRoute] = useState(null);
   const [error, setError] = useState(null);
+
+  useEffect(() => {
+    getRecentDetections({ limit: 40 })
+      .then(setRecent)
+      .catch(() => {});
+  }, []);
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -165,7 +172,37 @@ export default function DetectionHistory({ onShowRoute }) {
         </div>
       )}
 
-      {!routeData && results.length === 0 && !loadingSearch && !error && (
+      {!routeData && results.length === 0 && recent.length > 0 && (
+        <div style={{ flex: 1, overflowY: "auto", padding: "0 20px 20px" }}>
+          <div style={{ fontSize: 11, color: "var(--text-tertiary)", padding: "12px 0 6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Recent detections
+          </div>
+          {recent.map((d) => (
+            <div
+              key={d.id}
+              style={{
+                padding: "10px 12px", marginBottom: 6,
+                background: "var(--bg-void)", borderRadius: 6,
+                border: "1px solid var(--border-hairline)",
+                display: "flex", justifyContent: "space-between", gap: 12, cursor: "pointer",
+              }}
+              onClick={() => d.normalized_value && handleLoadRoute(d.normalized_value)}
+            >
+              <div>
+                <div className="mono" style={{ fontSize: 14, fontWeight: 700 }}>{d.normalized_value || d.raw_value || "—"}</div>
+                <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                  {d.camera_code} · {d.camera_name} · {d.vehicle_type || "vehicle"}
+                </div>
+              </div>
+              <div style={{ fontSize: 11, color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
+                {d.detected_at ? new Date(d.detected_at).toLocaleString() : ""}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!routeData && results.length === 0 && recent.length === 0 && !loadingSearch && !error && (
         <div style={{ padding: 30, color: "var(--text-tertiary)", fontSize: 13, textAlign: "center" }}>
           Search for a vehicle plate to see detection history and reconstruct its route across cameras.
         </div>

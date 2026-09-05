@@ -2,7 +2,7 @@ import axios from "axios";
 
 const api = axios.create({
   baseURL: "/api/v1",
-  timeout: 10000,
+  timeout: 20000,
 });
 
 // Attach the JWT (if we have one) to every request.
@@ -64,6 +64,10 @@ export const getWatchlistEntries = (params) =>
   api.get("/watchlist/entries", { params }).then((r) => r.data);
 export const createWatchlistEntry = (payload) =>
   api.post("/watchlist/entries", payload).then((r) => r.data);
+
+// ---- Departments ----
+export const getRecentDetections = (params) =>
+  api.get("/detections", { params }).then((r) => r.data);
 
 // ---- Departments ----
 export const getDepartments = () => api.get("/departments").then((r) => r.data);
