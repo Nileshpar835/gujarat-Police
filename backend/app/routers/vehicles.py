@@ -104,3 +104,27 @@ async def get_vehicle_route(
         "camera_sequence": [r["camera_code"] for r in route],
         "route": route,
     }
+
+
+@router.get("/search")
+async def search_vehicles(
+    q: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Fuzzy plate search for the dashboard's vehicle search box."""
+    normalized = normalize_plate(q)
+    result = await db.execute(
+        select(Vehicle).where(Vehicle.registration_number.ilike(f"%{normalized}%")).limit(20)
+    )
+    vehicles = result.scalars().all()
+    return [
+        {
+            "registration_number": v.registration_number,
+            "vehicle_type": v.vehicle_type,
+            "color": v.color,
+            "first_seen_at": v.first_seen_at.isoformat() if v.first_seen_at else None,
+            "last_seen_at": v.last_seen_at.isoformat() if v.last_seen_at else None,
+        }
+        for v in vehicles
+    ]

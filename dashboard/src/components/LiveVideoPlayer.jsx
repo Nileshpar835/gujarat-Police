@@ -3,7 +3,15 @@ import Hls from "hls.js";
 
 /**
  * Plays a camera's HLS stream from the Stream Gateway (MediaMTX).
+ * The gateway exposes one HLS path per camera_code, kept alive by
+ * gateway_sync.py polling the backend's active camera list.
  *
+ * Why the stream shows "unavailable":
+ *   - Camera has no stream_url registered in the backend
+ *   - Camera is registered but status != active → gateway_sync skips it
+ *   - MediaMTX has no path for this camera_code yet
+ *   Run: POST /api/v1/cameras/{id}/health-check to flip status to active
+ *   Then gateway_sync will register the path within 30s.
  * Strategy:
  *  1. Primary:  /hls/<SENTINEL-camXX>/index.m3u8  (MediaMTX, local gateway)
  *  2. Fallback: https://cctv.corp8.cloud/<camXX>/index.m3u8 (Sentinel CDN — needs browser login session)
@@ -26,12 +34,21 @@ function buildSources(cameraCode, gatewayBase) {
 }
 
 export default function LiveVideoPlayer({ cameraCode, streamGatewayBaseUrl }) {
+  const videoRef = useRef(null);
+  const hlsRef = useRef(null);
+  const [status, setStatus] = useState("connecting"); // connecting | live | error
+  const [retryCount, setRetryCount] = useState(0);
   const videoRef  = useRef(null);
   const hlsRef    = useRef(null);
   const [status, setStatus]       = useState("connecting"); // connecting | live | error
   const [sourceIdx, setSourceIdx] = useState(0);
   const [retryKey, setRetryKey]   = useState(0); // bump to force full restart
 
+  const startStream = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || !cameraCode) return;
+
+    // Clean up previous hls instance
   const destroy = useCallback(() => {
     if (hlsRef.current) {
       hlsRef.current.destroy();
@@ -39,6 +56,10 @@ export default function LiveVideoPlayer({ cameraCode, streamGatewayBaseUrl }) {
     }
   }, []);
 
+    // Resolve camera identifier (e.g. SENTINEL-cam03 -> cam03)
+    const camId = cameraCode.replace(/^SENTINEL-/i, "").toLowerCase();
+    
+    const src = `${streamGatewayBaseUrl}/${cameraCode}/index.m3u8`;
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !cameraCode) return;
@@ -54,6 +75,10 @@ export default function LiveVideoPlayer({ cameraCode, streamGatewayBaseUrl }) {
     if (Hls.isSupported()) {
       const hls = new Hls({
         lowLatencyMode: true,
+        manifestLoadingMaxRetry: 4,
+        manifestLoadingRetryDelay: 1500,
+        xhrSetup: (xhr, url) => {
+          // Pass credentials so authenticated Sentinel sessions work seamlessly
         // Give each manifest attempt up to 3 s before we fail it
         manifestLoadingTimeOut:  3000,
         manifestLoadingMaxRetry: 2,
@@ -82,6 +107,7 @@ export default function LiveVideoPlayer({ cameraCode, streamGatewayBaseUrl }) {
       });
 
       hls.on(Hls.Events.ERROR, (_evt, data) => {
+        if (data.fatal) {
         if (!data.fatal) return;
 
         // Fatal error on primary → try next source
@@ -91,6 +117,8 @@ export default function LiveVideoPlayer({ cameraCode, streamGatewayBaseUrl }) {
           setSourceIdx(nextIdx);
         } else {
           setStatus("error");
+          hls.destroy();
+          hlsRef.current = null;
           destroy();
         }
       });
@@ -98,6 +126,7 @@ export default function LiveVideoPlayer({ cameraCode, streamGatewayBaseUrl }) {
       // Safari native HLS
       video.src = src;
       video.addEventListener("loadedmetadata", () => setStatus("live"), { once: true });
+      video.addEventListener("error", () => setStatus("error"), { once: true });
       video.addEventListener("error", () => {
         const nextIdx = sourceIdx + 1;
         if (nextIdx < sources.length) { setSourceIdx(nextIdx); }
@@ -106,7 +135,17 @@ export default function LiveVideoPlayer({ cameraCode, streamGatewayBaseUrl }) {
     } else {
       setStatus("error");
     }
+  }, [cameraCode, streamGatewayBaseUrl, retryCount]); // retryCount triggers re-run on manual retry
 
+  useEffect(() => {
+    startStream();
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+    };
+  }, [startStream]);
     return destroy;
   }, [cameraCode, streamGatewayBaseUrl, sourceIdx, retryKey, destroy]);
 
@@ -121,6 +160,7 @@ export default function LiveVideoPlayer({ cameraCode, streamGatewayBaseUrl }) {
         ref={videoRef}
         muted
         playsInline
+        style={{ width: "100%", height: "100%", objectFit: "contain", display: status === "live" ? "block" : "none" }}
         style={{
           width: "100%", height: "100%",
           objectFit: "contain",
@@ -128,6 +168,7 @@ export default function LiveVideoPlayer({ cameraCode, streamGatewayBaseUrl }) {
         }}
       />
 
+      {/* Status overlay — shown until stream is live */}
       {/* Status overlay */}
       {status !== "live" && (
         <div
@@ -140,6 +181,9 @@ export default function LiveVideoPlayer({ cameraCode, streamGatewayBaseUrl }) {
         >
           {status === "connecting" && (
             <>
+              <div style={{ fontSize: 20 }}>📡</div>
+              <div style={{ fontSize: 12, color: "#5c6b86" }}>Connecting to stream…</div>
+              <div style={{ fontSize: 11, color: "#3a4a5c", textAlign: "center", maxWidth: 200 }}>
               {/* Pulsing ring */}
               <div style={{
                 width: 36, height: 36, borderRadius: "50%",
@@ -155,21 +199,28 @@ export default function LiveVideoPlayer({ cameraCode, streamGatewayBaseUrl }) {
           )}
           {status === "error" && (
             <>
+              <div style={{ fontSize: 20 }}>📷</div>
+              <div style={{ fontSize: 12, color: "#ef4444", textAlign: "center", maxWidth: 220 }}>
               <div style={{ fontSize: 24 }}>📷</div>
               <div style={{ fontSize: 12, color: "#ef4444", textAlign: "center", maxWidth: 200 }}>
                 Stream unavailable
               </div>
+              <div style={{ fontSize: 11, color: "#5c6b86", textAlign: "center", maxWidth: 220 }}>
+                Camera may be offline or not yet registered in the gateway
               <div style={{ fontSize: 10, color: "#5c6b86", textAlign: "center", maxWidth: 200 }}>
                 {cameraCode}
               </div>
               <button
+                onClick={() => setRetryCount((n) => n + 1)}
                 onClick={handleRetry}
                 style={{
+                  marginTop: 4, fontSize: 11, padding: "4px 12px",
                   marginTop: 4, fontSize: 11, padding: "4px 14px",
                   background: "#1a2a3a", border: "1px solid #2d4060",
                   borderRadius: 4, color: "#7fa8d8", cursor: "pointer",
                 }}
               >
+                Retry
                 ↺ Retry
               </button>
             </>
@@ -177,15 +228,20 @@ export default function LiveVideoPlayer({ cameraCode, streamGatewayBaseUrl }) {
         </div>
       )}
 
+      {/* Live indicator badge */}
       {/* LIVE badge */}
       {status === "live" && (
         <div
           style={{
             position: "absolute", top: 8, left: 8,
+            background: "rgba(10,14,20,0.7)", borderRadius: 4,
+            padding: "2px 7px", display: "flex", alignItems: "center", gap: 5,
             background: "rgba(10,14,20,0.75)", borderRadius: 4,
             padding: "2px 8px", display: "flex", alignItems: "center", gap: 5,
           }}
         >
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />
+          <span style={{ fontSize: 10, color: "#86efac", fontWeight: 700 }}>LIVE</span>
           <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e", display: "inline-block",
             boxShadow: "0 0 6px #22c55e", animation: "pulse 2s ease-in-out infinite" }} />
           <span style={{ fontSize: 10, color: "#86efac", fontWeight: 700, letterSpacing: "0.05em" }}>LIVE</span>
