@@ -56,7 +56,7 @@ services:
       SAMPLE_FPS: "2"
       DETECTION_CONFIDENCE_THRESHOLD: "0.5"
       OCR_CONFIDENCE_THRESHOLD: "0.60"
-      MAX_CONCURRENT_CAMERAS: "8"
+      MAX_CONCURRENT_CAMERAS: "15"
       CAMERA_POLL_INTERVAL_SECONDS: "20"
     volumes:
       - ./ai-worker:/app

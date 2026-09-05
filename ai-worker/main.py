@@ -5,13 +5,22 @@ Polls the Registry & GIS backend for active cameras and maintains one
 CameraWorker thread per camera, restarting the camera list periodically
 so newly-onboarded cameras are picked up without redeploying this service
 (the model discovery pattern implied by the Federation Middleware in the
-HLD — this worker doesn't need to know about specific vendors, only the
+HLD — this worker doesn''t need to know about specific vendors, only the
 normalised camera list the backend already exposes).
 """
 
 import os
 import logging
 import time
+
+# Suppress verbose ffmpeg / libav decoder messages (h264 "error while decoding
+# MB …", hevc "Could not find ref with POC …", etc.).  These are produced by
+# OpenCV''s FFmpeg backend writing directly to stderr.  Per the Sentinel guide,
+# decoder warnings must not be treated as fatal — they are safe to suppress so
+# our structured log stays readable.
+os.environ.setdefault("OPENCV_FFMPEG_LOGLEVEL", "8")  # AV_LOG_FATAL only
+# Some ffmpeg builds still honour this env var for libav* output:
+os.environ.setdefault("FFREPORT", "")
 
 from camera_worker import CameraWorker
 from backend_client import BackendClient

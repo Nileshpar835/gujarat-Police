@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import Hls from "hls.js";
 
 /**
@@ -17,8 +17,10 @@ const SENTINEL_CDN_ORIGIN = "https://cctv.corp8.cloud";
 function buildSources(cameraCode, gatewayBase) {
   const camId = cameraCode.replace(/^SENTINEL-/i, "");
   return [
-    `/sentinel-hls/${camId}/index.m3u8`,
+    // 1st: Local MediaMTX relay — low latency, on-demand, same network
     `${gatewayBase}/${cameraCode}/index.m3u8`,
+    // 2nd: Sentinel CDN — requires active browser session cookie (auth)
+    `/sentinel-hls/${camId}/index.m3u8`,
   ];
 }
 
@@ -255,7 +257,7 @@ export default function LiveVideoPlayer({
                 }}
               />
               <div style={{ fontSize: 11, color: "#5c6b86" }}>
-                {sourceIdx === 0 ? "Connecting on-demand…" : "Connecting Sentinel HLS…"}
+                {sourceIdx === 0 ? "Connecting on-demand…" : "Connecting Sentinel CDN…"}
               </div>
               <div className="mono" style={{ fontSize: 10, color: "#3a4a5c" }}>{cameraCode}</div>
             </>
@@ -346,7 +348,7 @@ export default function LiveVideoPlayer({
               color: "#c4b5fd",
             }}
           >
-            HLS
+            CDN
           </div>
         )}
         {status === "live" && (
