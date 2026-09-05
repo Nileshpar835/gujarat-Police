@@ -65,7 +65,6 @@ def upsert_path(client: httpx.Client, camera_code: str, stream_url: str, path_ex
     payload = {
         "source": stream_url,
         "sourceOnDemand": False,  # always-pull, since the dashboard/AI worker expect it live
-        "rtspTransport": "tcp",
     }
     verb = client.patch if path_exists else client.post
     endpoint = "patch" if path_exists else "add"

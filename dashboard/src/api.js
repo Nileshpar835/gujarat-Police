@@ -27,6 +27,7 @@ api.interceptors.response.use(
   }
 );
 
+// ---- Auth ----
 export const login = (username, password) => {
   const form = new URLSearchParams();
   form.append("username", username);
@@ -38,14 +39,33 @@ export const login = (username, password) => {
 
 export const getMe = () => api.get("/auth/me").then((r) => r.data);
 
+// ---- Cameras ----
 export const getCamerasGis = () => api.get("/cameras/gis").then((r) => r.data);
 export const getCameras = (params) => api.get("/cameras", { params }).then((r) => r.data);
+export const runHealthCheck = (cameraId) =>
+  api.post(`/cameras/${cameraId}/health-check`).then((r) => r.data);
+
+// ---- Alerts ----
 export const getAlerts = (params) => api.get("/alerts", { params }).then((r) => r.data);
-export const acknowledgeAlert = (alertId) => api.post(`/alerts/${alertId}/acknowledge`).then((r) => r.data);
-export const searchVehicles = (q) => api.get("/vehicles/search", { params: { q } }).then((r) => r.data);
+export const acknowledgeAlert = (alertId) =>
+  api.post(`/alerts/${alertId}/acknowledge`).then((r) => r.data);
+
+// ---- Vehicles ----
+export const searchVehicles = (q) =>
+  api.get("/vehicles/search", { params: { q } }).then((r) => r.data);
 export const getVehicleRoute = (registrationNumber) =>
   api.get(`/vehicles/${registrationNumber}/route`).then((r) => r.data);
+
+// ---- Watchlist ----
 export const getWatchlists = () => api.get("/watchlists").then((r) => r.data);
+export const createWatchlist = (payload) =>
+  api.post("/watchlists", payload).then((r) => r.data);
+export const getWatchlistEntries = (params) =>
+  api.get("/watchlist/entries", { params }).then((r) => r.data);
+export const createWatchlistEntry = (payload) =>
+  api.post("/watchlist/entries", payload).then((r) => r.data);
+
+// ---- Departments ----
 export const getDepartments = () => api.get("/departments").then((r) => r.data);
 
 export default api;

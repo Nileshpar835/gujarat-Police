@@ -120,9 +120,17 @@ async def create_user(
 
 
 @router.get("/me", response_model=dict)
-async def get_me(current_user: CurrentUser = Depends(get_current_user)):
+async def get_me(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models import User
+    from sqlalchemy import select
+    user_result = await db.execute(select(User).where(User.id == current_user.id))
+    user = user_result.scalar_one_or_none()
     return {
         "id": str(current_user.id),
+        "username": user.username if user else None,
         "role": current_user.role,
         "department_id": str(current_user.department_id) if current_user.department_id else None,
     }

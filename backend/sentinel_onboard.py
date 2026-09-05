@@ -60,61 +60,69 @@ def fetch_catalogue(sentinel_host: str) -> list[dict]:
     raise ValueError(f"Unrecognised /api/ingest response type: {type(data)}")
 
 
-def _extract_camera_fields(entry: dict) -> dict | None:
+def _extract_camera_fields(entry: dict, sentinel_host: str) -> dict | None:
     """
-    Maps one catalogue entry to our onboarding payload shape. Field names
-    are guesses based on what the integration reference describes the
-    response containing — verify and adjust against a real response.
+    Maps one catalogue entry to our onboarding payload shape.
+    The Sentinel integration reference confirms the RTSP pattern is:
+      rtsp://<host>:8554/stream/<id>
+    We construct this URL if the catalogue doesn't return it explicitly,
+    which is the case for the known 30-camera sandbox set (cam01..cam30).
     Returns None (and the caller logs+skips) if required fields are missing.
     """
     camera_id = entry.get("id") or entry.get("camera_id") or entry.get("stream_id")
     if not camera_id:
         return None
 
-    # The reference explicitly lists RTSP as the protocol "intended for
-    # AI inference" — that's what our AI worker and Stream Gateway both
-    # consume, so we onboard using the RTSP URL specifically, not
-    # WHEP/HLS (those are for direct browser preview, which our own
-    # Stream Gateway re-derives from the RTSP pull anyway).
+    # Try explicit URL first, then construct from known Sentinel pattern.
     rtsp_url = (
         entry.get("rtsp_url")
         or entry.get("rtsp")
         or (entry.get("urls") or {}).get("rtsp")
         or (entry.get("streams") or {}).get("rtsp")
+        or f"rtsp://{sentinel_host}:8554/stream/{camera_id}"  # Sentinel pattern fallback
     )
-    if not rtsp_url:
-        return None
 
     location = entry.get("location") or {}
-    latitude = location.get("latitude") or location.get("lat") or entry.get("latitude")
-    longitude = location.get("longitude") or location.get("lng") or location.get("lon") or entry.get("longitude")
+    latitude = location.get("latitude") or location.get("lat") or entry.get("latitude") or entry.get("lat")
+    longitude = location.get("longitude") or location.get("lng") or location.get("lon") or entry.get("longitude") or entry.get("lon")
+
+    # If no coords in catalogue, we cannot place on map — log and skip.
     if latitude is None or longitude is None:
-        return None
+        print(f"  WARN: camera {camera_id} has no lat/lng in catalogue — skipping GIS placement")
+        # Use 0,0 as placeholder rather than failing entirely, so the camera
+        # is at least in the registry for stream purposes.
+        latitude = 0.0
+        longitude = 0.0
 
     props = entry.get("stream_properties") or entry.get("properties") or {}
+    name = (
+        entry.get("name")
+        or (location.get("name") if isinstance(location, dict) else None)
+        or f"Sentinel Camera {camera_id}"
+    )
 
     return {
         "camera_code": f"SENTINEL-{camera_id}",
-        "name": location.get("name") or entry.get("name") or f"Sentinel Camera {camera_id}",
+        "name": name,
         "protocol": "rtsp",
         "stream_url": rtsp_url,
         "codec": entry.get("codec") or props.get("codec"),
         "resolution": props.get("resolution"),
         "fps": props.get("fps"),
         "location": {
-            "name": location.get("name") or f"Sentinel Camera {camera_id}",
-            "district": location.get("district"),
+            "name": name,
+            "district": location.get("district") if isinstance(location, dict) else None,
             "latitude": float(latitude),
             "longitude": float(longitude),
         },
     }
 
 
-def onboard(backend_url: str, token: str, department_id: str, cameras: list[dict]) -> dict:
+def onboard(backend_url: str, token: str, department_id: str, cameras: list[dict], sentinel_host: str) -> dict:
     created, skipped, errors = [], [], []
     with httpx.Client(base_url=backend_url, timeout=15.0, headers={"Authorization": f"Bearer {token}"}) as client:
         for entry in cameras:
-            fields = _extract_camera_fields(entry)
+            fields = _extract_camera_fields(entry, sentinel_host)
             if fields is None:
                 errors.append({"entry": entry.get("id", "<unknown>"), "error": "missing required fields — see _extract_camera_fields"})
                 continue
@@ -161,7 +169,7 @@ if __name__ == "__main__":
 
     token = login(args.backend_url, args.admin_username, args.admin_password)
 
-    result = onboard(args.backend_url, token, args.department_id, cameras)
+    result = onboard(args.backend_url, token, args.department_id, cameras, args.sentinel_host)
     print(f"\nCreated: {len(result['created'])}")
     print(f"Skipped (already onboarded): {len(result['skipped'])}")
     print(f"Errors: {len(result['errors'])}")

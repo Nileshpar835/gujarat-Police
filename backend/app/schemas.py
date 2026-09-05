@@ -110,8 +110,16 @@ class AlertOut(BaseModel):
     id: uuid.UUID
     event_type: str
     camera_id: Optional[uuid.UUID] = None
+    detection_id: Optional[uuid.UUID] = None
+    entity_type: Optional[str] = None
+    entity_id: Optional[uuid.UUID] = None
     detected_value: Optional[str] = None
-    severity: str
-    status: str
+    watchlist_entry_id: Optional[uuid.UUID] = None
     match_confidence: Optional[float] = None
+    severity: str
+    location_id: Optional[uuid.UUID] = None
+    evidence_uri: Optional[str] = None
+    status: str
+    acknowledged_by: Optional[uuid.UUID] = None
+    acknowledged_at: Optional[datetime] = None
     triggered_at: datetime

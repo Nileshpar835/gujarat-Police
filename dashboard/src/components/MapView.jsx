@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { MapContainer, TileLayer, CircleMarker, Popup, Polyline, Marker } from "react-leaflet";
 import L from "leaflet";
 
 const GUJARAT_CENTER = [22.6, 71.6];
+const CARTO_API_KEY = "cb1_2xmo_1_9b12b7c0f3f90fce9c989d81";
 
 const STATUS_COLOR = {
   active: "#3dd6c4",
@@ -27,7 +28,7 @@ function routeStopIcon(index, total) {
   });
 }
 
-export default function MapView({ cameras, activeRoute }) {
+export default function MapView({ cameras, activeRoute, onCameraClick }) {
   const routeLatLngs = useMemo(
     () => (activeRoute ? activeRoute.route.map((r) => [r.latitude, r.longitude]) : []),
     [activeRoute]
@@ -41,9 +42,11 @@ export default function MapView({ cameras, activeRoute }) {
       zoomControl={true}
     >
       <TileLayer
-        // dark basemap keeps focus on camera/alert/route data rather than the map chrome
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-        attribution='&copy; OpenStreetMap contributors &copy; CARTO'
+        // CARTO Dark Matter with API key — professional government-grade basemap
+        url={`https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?api_key=${CARTO_API_KEY}`}
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        subdomains="abcd"
+        maxZoom={19}
       />
 
       {cameras.map((cam) => (
@@ -57,6 +60,7 @@ export default function MapView({ cameras, activeRoute }) {
             fillOpacity: 0.85,
             weight: 2,
           }}
+          eventHandlers={onCameraClick ? { click: () => onCameraClick(cam) } : {}}
         >
           <Popup>
             <div style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>
@@ -66,7 +70,22 @@ export default function MapView({ cameras, activeRoute }) {
               <br />
               {cam.district}
               <br />
-              status: {cam.status}
+              Status: <span style={{ color: STATUS_COLOR[cam.status] || "#aaa" }}>{cam.status}</span>
+              {onCameraClick && (
+                <>
+                  <br />
+                  <button
+                    onClick={() => onCameraClick(cam)}
+                    style={{
+                      marginTop: 6, fontSize: 11, padding: "3px 8px",
+                      background: "#1a2a3a", border: "1px solid #3dd6c4",
+                      color: "#3dd6c4", borderRadius: 4, cursor: "pointer",
+                    }}
+                  >
+                    View Feed
+                  </button>
+                </>
+              )}
             </div>
           </Popup>
         </CircleMarker>
@@ -90,7 +109,14 @@ export default function MapView({ cameras, activeRoute }) {
                   <br />
                   {new Date(stop.timestamp).toLocaleString()}
                   <br />
-                  conf: {(stop.ocr_confidence ?? 0).toFixed(2)}
+                  OCR conf: {(stop.ocr_confidence ?? 0).toFixed(2)}
+                  {stop.evidence_uri && (
+                    <>
+                      <br />
+                      <a href={stop.evidence_uri} target="_blank" rel="noreferrer"
+                        style={{ color: "#3dd6c4" }}>Evidence</a>
+                    </>
+                  )}
                 </div>
               </Popup>
             </Marker>

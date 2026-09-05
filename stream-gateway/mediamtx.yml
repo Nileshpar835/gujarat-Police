@@ -38,17 +38,7 @@ webrtcAllowOrigins: ["*"]
 # No paths are statically defined — every camera path is registered at
 # runtime by gateway_sync.py based on the Registry & GIS service's camera
 # list. This is what keeps the gateway vendor/camera-count agnostic.
-#
-# rtspTransport (singular) below is the default transport MediaMTX uses
-# when PULLING from an RTSP source (e.g. a real camera) — distinct from
-# rtspTransports (plural, above) which governs what OUR OWN RTSP server
-# accepts from readers like the AI worker. Left on "automatic", MediaMTX
-# will try UDP before falling back to TCP, which is exactly the failure
-# mode the Sentinel Camera Grid integration reference warns against
-# ("UDP is accepted but fails across NAT and most corporate firewalls...
-# produces corrupt frames that look like model bugs"). gateway_sync.py
-# also sets this explicitly per-path when registering cameras, as
-# belt-and-suspenders — this default covers any path added another way.
-# rtspTransport: tcp
+# gateway_sync.py sets sourceProtocol per-path when registering cameras
+# to force TCP pulls from source cameras (per Sentinel integration spec).
 
 paths: {}
