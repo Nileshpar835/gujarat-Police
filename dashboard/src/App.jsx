@@ -92,7 +92,7 @@ export default function App() {
   };
 
   const camerasById = useMemo(
-    () => Object.fromEntries(cameras.map((c) => [c.id, c])),
+    () => Object.fromEntries((cameras || []).map((c) => [c.id, c])),
     [cameras]
   );
 

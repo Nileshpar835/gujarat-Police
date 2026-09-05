@@ -1,5 +1,7 @@
-export default function RouteDetail({ route, onClose }) {
+﻿export default function RouteDetail({ route, onClose }) {
   if (!route) return null;
+
+  const stops = Array.isArray(route.route) ? route.route : [];
 
   return (
     <div
@@ -32,26 +34,26 @@ export default function RouteDetail({ route, onClose }) {
             {route.registration_number}
           </div>
           <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-            {route.vehicle_type || "vehicle"} · {route.color || "—"} · {route.total_detections} sighting
-            {route.total_detections === 1 ? "" : "s"}
+            {route.vehicle_type || "vehicle"} · {route.color || "—"} · {route.total_detections ?? stops.length} sighting
+            {(route.total_detections ?? stops.length) === 1 ? "" : "s"}
           </div>
         </div>
         <button
           onClick={onClose}
-          style={{ background: "none", border: "none", color: "var(--text-tertiary)", fontSize: 18 }}
+          style={{ background: "none", border: "none", color: "var(--text-tertiary)", fontSize: 18, cursor: "pointer" }}
         >
           ×
         </button>
       </div>
 
       <div style={{ overflowY: "auto", padding: "8px 0" }}>
-        {route.route.length === 0 && (
+        {stops.length === 0 && (
           <div style={{ padding: 16, fontSize: 13, color: "var(--text-tertiary)" }}>
             No detections recorded for this plate yet.
           </div>
         )}
-        {route.route.map((stop, i) => (
-          <div key={stop.detection_id} style={{ padding: "8px 16px", display: "flex", gap: 10 }}>
+        {stops.map((stop, i) => (
+          <div key={stop.detection_id || i} style={{ padding: "8px 16px", display: "flex", gap: 10 }}>
             <div
               style={{
                 width: 10,
@@ -60,16 +62,16 @@ export default function RouteDetail({ route, onClose }) {
                 marginTop: 4,
                 flexShrink: 0,
                 background:
-                  i === 0 ? "var(--accent-active)" : i === route.route.length - 1 ? "var(--severity-critical)" : "var(--text-tertiary)",
+                  i === 0 ? "var(--accent-active)" : i === stops.length - 1 ? "var(--severity-critical)" : "var(--text-tertiary)",
               }}
             />
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>{stop.camera_name}</div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{stop.camera_name || stop.camera_code}</div>
               <div className="mono" style={{ fontSize: 11, color: "var(--text-secondary)" }}>
-                {stop.camera_code} · {stop.district}
+                {stop.camera_code} {stop.district ? `· ${stop.district}` : ""}
               </div>
               <div className="mono" style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
-                {new Date(stop.timestamp).toLocaleString()}
+                {stop.timestamp ? new Date(stop.timestamp).toLocaleString() : ""}
               </div>
             </div>
           </div>

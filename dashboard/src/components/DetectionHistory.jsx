@@ -133,7 +133,7 @@ export default function DetectionHistory({ onShowRoute }) {
           <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 10 }}>
             {[routeData.vehicle_type, routeData.color].filter(Boolean).join(" · ")}
           </div>
-          {routeData.route.map((stop, i) => (
+          {(Array.isArray(routeData.route) ? routeData.route : []).map((stop, i) => (
             <div
               key={stop.detection_id}
               style={{

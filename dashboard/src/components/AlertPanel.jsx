@@ -136,8 +136,9 @@ function AlertCard({ alert, camera, onAcknowledge }) {
   );
 }
 
-export default function AlertPanel({ alerts, onAcknowledge, camerasById }) {
-  const newCount = alerts.filter((a) => a.status === "new").length;
+export default function AlertPanel({ alerts = [], onAcknowledge, camerasById = {} }) {
+  const alertList = Array.isArray(alerts) ? alerts : [];
+  const newCount = alertList.filter((a) => a.status === "new").length;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -163,7 +164,7 @@ export default function AlertPanel({ alerts, onAcknowledge, camerasById }) {
 
       {/* Alert list */}
       <div style={{ overflowY: "auto", flex: 1 }}>
-        {alerts.length === 0 && (
+        {alertList.length === 0 && (
           <div style={{ padding: 24, color: "var(--text-tertiary)", fontSize: 13, textAlign: "center" }}>
             No alerts yet.<br />
             <span style={{ fontSize: 11, lineHeight: 1.6 }}>
@@ -171,7 +172,7 @@ export default function AlertPanel({ alerts, onAcknowledge, camerasById }) {
             </span>
           </div>
         )}
-        {alerts.map((alert) => (
+        {alertList.map((alert) => (
           <AlertCard
             key={alert.id}
             alert={alert}

@@ -49,7 +49,6 @@ services:
     environment:
       BACKEND_BASE_URL: "http://backend:8000/api/v1"
       AI_WORKER_API_KEY: "${AI_WORKER_API_KEY:?set a real key in .env for anything beyond local dev}"
-      SAMPLE_FPS: "5"
       SAMPLE_FPS: "2"
       DETECTION_CONFIDENCE_THRESHOLD: "0.5"
       OCR_CONFIDENCE_THRESHOLD: "0.60"

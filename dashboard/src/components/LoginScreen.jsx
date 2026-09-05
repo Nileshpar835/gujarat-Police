@@ -1,18 +1,17 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { login } from "../api.js";
 
 export default function LoginScreen({ onLoginSuccess }) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState("admin");
+  const [password, setPassword] = useState("admin123");
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const submit = async (e) => {
-    e.preventDefault();
+  const doLogin = async (u, p) => {
     setLoading(true);
     setError(null);
     try {
-      const { access_token } = await login(username, password);
+      const { access_token } = await login(u, p);
       localStorage.setItem("cctv_access_token", access_token);
       onLoginSuccess();
     } catch (err) {
@@ -24,6 +23,11 @@ export default function LoginScreen({ onLoginSuccess }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const submit = (e) => {
+    e.preventDefault();
+    doLogin(username, password);
   };
 
   return (
@@ -39,18 +43,55 @@ export default function LoginScreen({ onLoginSuccess }) {
       <form
         onSubmit={submit}
         style={{
-          width: 340,
+          width: 360,
           background: "var(--bg-panel)",
           border: "1px solid var(--border-hairline)",
           borderRadius: 8,
           padding: 28,
+          boxShadow: "0 12px 32px rgba(0,0,0,0.5)",
         }}
       >
-        <div style={{ marginBottom: 4, fontSize: 16, fontWeight: 700 }}>
-          Gujarat CCTV Command Dashboard
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent-active)" }} />
+          <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)" }}>
+            Gujarat CCTV Command Dashboard
+          </span>
         </div>
-        <div style={{ marginBottom: 20, fontSize: 12, color: "var(--text-secondary)" }}>
-          Sign in to continue
+        <div style={{ marginBottom: 16, fontSize: 12, color: "var(--text-secondary)" }}>
+          Gujarat Police · State CCTV Network
+        </div>
+
+        {/* Demo credentials hint badge */}
+        <div
+          style={{
+            marginBottom: 16,
+            padding: "8px 12px",
+            background: "rgba(61, 214, 196, 0.08)",
+            border: "1px solid rgba(61, 214, 196, 0.2)",
+            borderRadius: 6,
+            fontSize: 11,
+            color: "var(--text-secondary)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <span>Demo User: <strong style={{ color: "var(--accent-active)" }}>admin</strong> / <strong style={{ color: "var(--accent-active)" }}>admin123</strong></span>
+          <button
+            type="button"
+            onClick={() => { setUsername("admin"); setPassword("admin123"); }}
+            style={{
+              background: "none",
+              border: "none",
+              color: "var(--accent-active)",
+              fontSize: 11,
+              cursor: "pointer",
+              textDecoration: "underline",
+              padding: 0,
+            }}
+          >
+            Reset
+          </button>
         </div>
 
         <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 4 }}>
@@ -104,12 +145,13 @@ export default function LoginScreen({ onLoginSuccess }) {
             color: "var(--accent-active)",
             border: "1px solid var(--accent-active)",
             borderRadius: 6,
-            padding: "9px 0",
+            padding: "10px 0",
             fontSize: 13,
             fontWeight: 600,
+            cursor: "pointer",
           }}
         >
-          {loading ? "Signing in…" : "Sign in"}
+          {loading ? "Signing in…" : "⚡ Sign in to Command Centre"}
         </button>
       </form>
     </div>

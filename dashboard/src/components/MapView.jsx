@@ -1,14 +1,10 @@
-import { useMemo } from "react";
+﻿import { useMemo } from "react";
 import { MapContainer, TileLayer, CircleMarker, Popup, Polyline, Marker } from "react-leaflet";
 import L from "leaflet";
 
 const GUJARAT_CENTER = [22.6, 71.6];
 
 // CARTO Dark Matter raster tiles with API key.
-// The {s}.basemaps.cartocdn.com/dark_all/ path is the working authenticated URL —
-// it was loading tiles correctly before; adding ?key= removes the watermark.
-// The /rastertiles/ path shown in their email example requires a different CDN
-// setup and 404s from Docker (basemaps.cartocdn.com without subdomains).
 const CARTO_TILE_URL =
   "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=cb1_2xmo_1_9b12b7c0f3f90fce9c989d81";
 
@@ -35,11 +31,25 @@ function routeStopIcon(index, total) {
   });
 }
 
-export default function MapView({ cameras, activeRoute, onCameraClick }) {
+export default function MapView({ cameras = [], activeRoute, onCameraClick }) {
+  const validStops = useMemo(() => {
+    if (!activeRoute || !Array.isArray(activeRoute.route)) return [];
+    return activeRoute.route.filter(
+      (r) => r.latitude != null && r.longitude != null && !isNaN(Number(r.latitude)) && !isNaN(Number(r.longitude))
+    );
+  }, [activeRoute]);
+
   const routeLatLngs = useMemo(
-    () => (activeRoute ? activeRoute.route.map((r) => [r.latitude, r.longitude]) : []),
-    [activeRoute]
+    () => validStops.map((r) => [Number(r.latitude), Number(r.longitude)]),
+    [validStops]
   );
+
+  const validCameras = useMemo(() => {
+    if (!Array.isArray(cameras)) return [];
+    return cameras.filter(
+      (c) => c.latitude != null && c.longitude != null && !isNaN(Number(c.latitude)) && !isNaN(Number(c.longitude))
+    );
+  }, [cameras]);
 
   return (
     <MapContainer
@@ -55,10 +65,10 @@ export default function MapView({ cameras, activeRoute, onCameraClick }) {
         maxZoom={19}
       />
 
-      {cameras.map((cam) => (
+      {validCameras.map((cam) => (
         <CircleMarker
           key={cam.id}
-          center={[cam.latitude, cam.longitude]}
+          center={[Number(cam.latitude), Number(cam.longitude)]}
           radius={6}
           pathOptions={{
             color: STATUS_COLOR[cam.status] || STATUS_COLOR.inactive,
@@ -97,17 +107,17 @@ export default function MapView({ cameras, activeRoute, onCameraClick }) {
         </CircleMarker>
       ))}
 
-      {activeRoute && (
+      {validStops.length > 0 && (
         <>
           <Polyline
             positions={routeLatLngs}
             pathOptions={{ color: "#3dd6c4", weight: 3, opacity: 0.8, dashArray: "6 6" }}
           />
-          {activeRoute.route.map((stop, i) => (
+          {validStops.map((stop, i) => (
             <Marker
-              key={stop.detection_id}
-              position={[stop.latitude, stop.longitude]}
-              icon={routeStopIcon(i, activeRoute.route.length)}
+              key={stop.detection_id || i}
+              position={[Number(stop.latitude), Number(stop.longitude)]}
+              icon={routeStopIcon(i, validStops.length)}
             >
               <Popup>
                 <div style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>

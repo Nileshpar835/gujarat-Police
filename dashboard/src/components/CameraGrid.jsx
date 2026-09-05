@@ -8,12 +8,12 @@ const GRID_SIZES = [
   { label: "All 30", cols: 5, max: 30 },
 ];
 
-export default function CameraGrid({ cameras, streamGatewayBaseUrl }) {
+export default function CameraGrid({ cameras = [], streamGatewayBaseUrl }) {
   const [gridSize, setGridSize] = useState(GRID_SIZES[0]);
   const [slots, setSlots] = useState(Array(4).fill(null)); // null = empty slot
   const [activeSlot, setActiveSlot] = useState(null); // slot index being assigned
 
-  const activeCameras = cameras.filter((c) => c.status === "active");
+  const activeCameras = (cameras || []).filter((c) => c && c.status === "active");
 
   const handleSlotClick = (slotIndex) => {
     setActiveSlot(slotIndex === activeSlot ? null : slotIndex);
