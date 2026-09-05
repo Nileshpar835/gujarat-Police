@@ -31,6 +31,7 @@ class BackendClient:
         bounding_box: dict | None = None,
         evidence_uri: str | None = None,
         detected_at: datetime | None = None,
+        video_timestamp_ref: str | None = None,
     ) -> dict:
         payload = {
             "camera_id": camera_id,
@@ -41,6 +42,7 @@ class BackendClient:
             "vehicle_color": vehicle_color,
             "bounding_box": bounding_box,
             "evidence_uri": evidence_uri,
+            "video_timestamp_ref": video_timestamp_ref,
             "detected_at": (detected_at or datetime.now(timezone.utc)).isoformat(),
         }
         resp = self.client.post("/detections/anpr", json=payload)

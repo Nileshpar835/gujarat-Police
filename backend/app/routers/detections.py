@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +14,7 @@ from app.core.matching import (
     FUZZY_CANDIDATE_POOL_SIZE, FUZZY_CANDIDATE_MIN_TRIGRAM_SIMILARITY,
     confusion_aware_similarity,
 )
-from app.core.deps import require_ai_worker_key
+from app.core.deps import require_ai_worker_key, get_current_user, CurrentUser
 
 router = APIRouter(prefix="/detections", tags=["detections"])
 
@@ -32,6 +32,7 @@ class ANPRDetectionIn(BaseModel):
     vehicle_color: str | None = None
     bounding_box: dict | None = None
     evidence_uri: str | None = None
+    video_timestamp_ref: str | None = None
     detected_at: datetime
 
 
@@ -80,6 +81,7 @@ async def ingest_anpr_detection(payload: ANPRDetectionIn, db: AsyncSession = Dep
         vehicle_color=payload.vehicle_color,
         bounding_box=payload.bounding_box,
         evidence_uri=payload.evidence_uri,
+        video_timestamp_ref=payload.video_timestamp_ref,
         detected_at=payload.detected_at,
     )
     db.add(detection)
@@ -198,3 +200,42 @@ async def ingest_anpr_detection(payload: ANPRDetectionIn, db: AsyncSession = Dep
         match_type=match_type,
         alert_id=alert_id,
     )
+
+
+@router.get("", dependencies=[Depends(get_current_user)])
+async def list_detections(
+    limit: int = Query(50, ge=1, le=200),
+    camera_id: uuid.UUID | None = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Recent ANPR events for the detections tab — searchable history."""
+    query = (
+        select(
+            Detection.id, Detection.raw_value, Detection.normalized_value,
+            Detection.ocr_confidence, Detection.detection_confidence,
+            Detection.vehicle_type, Detection.detected_at, Detection.video_timestamp_ref,
+            Camera.camera_code, Camera.name.label("camera_name"),
+        )
+        .join(Camera, Detection.camera_id == Camera.id)
+        .order_by(Detection.detected_at.desc())
+        .limit(limit)
+    )
+    if camera_id:
+        query = query.where(Detection.camera_id == camera_id)
+    rows = (await db.execute(query)).all()
+    return [
+        {
+            "id": str(r.id),
+            "raw_value": r.raw_value,
+            "normalized_value": r.normalized_value,
+            "ocr_confidence": float(r.ocr_confidence) if r.ocr_confidence is not None else None,
+            "detection_confidence": float(r.detection_confidence) if r.detection_confidence is not None else None,
+            "vehicle_type": r.vehicle_type,
+            "detected_at": r.detected_at.isoformat() if r.detected_at else None,
+            "video_timestamp_ref": r.video_timestamp_ref,
+            "camera_code": r.camera_code,
+            "camera_name": r.camera_name,
+        }
+        for r in rows
+    ]

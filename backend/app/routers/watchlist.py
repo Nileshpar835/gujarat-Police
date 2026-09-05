@@ -96,6 +96,7 @@ async def create_watchlist_entry(
 @router.get("/entries", response_model=list[WatchlistEntryOut])
 async def search_watchlist_entries(
     registration_number: str | None = Query(None),
+    watchlist_id: uuid.UUID | None = Query(None),
     status: str | None = Query("active"),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
@@ -103,6 +104,8 @@ async def search_watchlist_entries(
     query = select(WatchlistEntry)
     if registration_number:
         query = query.where(WatchlistEntry.registration_number == normalize_plate(registration_number))
+    if watchlist_id:
+        query = query.where(WatchlistEntry.watchlist_id == watchlist_id)
     if status:
         query = query.where(WatchlistEntry.status == status)
     result = await db.execute(query)

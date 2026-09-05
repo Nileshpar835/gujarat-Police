@@ -3,40 +3,33 @@ One-shot camera onboarding script.
 
 Does everything in one command:
   1. Creates a "Gujarat Police" department (if none exists)
-  2. Gets the admin user from DB and mints a short-lived JWT
-     (no password needed — runs inside the trusted container)
-  3. Fetches the Sentinel camera catalogue from /api/ingest
-  4. Onboards all cameras to the backend registry
-  5. Prints a summary
+  2. Ensures an admin user exists
+  3. Fetches the Sentinel camera catalogue from /api/ingest (with auth)
+  4. Onboards/updates cameras with authenticated RTSP URLs
+  5. Marks cameras active so AI worker + MediaMTX pick them up
 
 Usage (run inside cctv_backend container):
     python3 setup_cameras.py
-
-Or with custom Sentinel host:
-    python3 setup_cameras.py --sentinel-host live.sentinelgujarat.in
-
-After this completes:
-  - Cameras appear in the sidebar (status=active)
-  - gateway_sync registers them in MediaMTX within 30s
-  - AI worker starts processing their RTSP streams
 """
 
 import argparse
 import asyncio
+import os
 import sys
-import httpx
+from urllib.parse import quote, urlsplit, urlunsplit
 
+import httpx
 from sqlalchemy import select
 
 from app.database import AsyncSessionLocal
 from app.models import User, Role, Department
-from app.core.security import create_access_token
+from app.core.security import create_access_token, hash_password
 
-DEFAULT_SENTINEL_HOST = "live.sentinelgujarat.in"
-BACKEND_URL = "http://localhost:8000/api/v1"
+DEFAULT_SENTINEL_HOST = os.getenv("SENTINEL_HOST", "103.250.160.189")
+SENTINEL_USERNAME = os.getenv("SENTINEL_USERNAME", "nileshpar835@gmail.com")
+SENTINEL_PASSWORD = os.getenv("SENTINEL_PASSWORD", "")
+BACKEND_URL = os.getenv("SETUP_BACKEND_URL", "http://localhost:8000/api/v1")
 
-# Known Sentinel camera list (cam01–cam30) from the hackathon sandbox.
-# Coordinates are approximate locations for the named intersections.
 KNOWN_CAMERAS = [
     {"id": "cam01", "name": "01 Chiman bhai Bridge",     "lat": 23.0395, "lng": 72.5569},
     {"id": "cam02", "name": "02 Janpath",                "lat": 23.0225, "lng": 72.5714},
@@ -71,117 +64,63 @@ KNOWN_CAMERAS = [
 ]
 
 
-async def get_or_create_department(db) -> str:
-    """Return department ID — creates 'Gujarat Police' if none exists."""
-    result = await db.execute(select(Department))
-    dept = result.scalars().first()
-    if dept:
-        print(f"  Using existing department: {dept.name} ({dept.id})")
-        return str(dept.id)
-
-    dept = Department(
-        name="Gujarat Police",
-        code="GUJ_POL",
-        description="Gujarat Police Home Department — CCTV Command Centre",
-        contact_email="cctv@gujaratpolice.gov.in",
-    )
-    db.add(dept)
-    await db.commit()
-    await db.refresh(dept)
-    print(f"  Created department: {dept.name} ({dept.id})")
-    return str(dept.id)
+def inject_rtsp_auth(url: str, username: str, password: str) -> str:
+    if not url or not username or not password:
+        return url
+    parts = urlsplit(url)
+    if parts.username:
+        return url
+    host = parts.hostname or ""
+    if parts.port:
+        host = f"{host}:{parts.port}"
+    userinfo = f"{quote(username, safe='')}:{quote(password, safe='')}"
+    return urlunsplit((parts.scheme, f"{userinfo}@{host}", parts.path, parts.query, parts.fragment))
 
 
-async def mint_admin_token(db) -> str:
-    """Get admin user from DB and mint a JWT — no password needed (trusted container)."""
-    result = await db.execute(
-        select(User).join(Role, User.role_id == Role.id).where(Role.name == "admin")
-    )
-    admin = result.scalars().first()
-    if not admin:
-        print("ERROR: No admin user found. Run seed_admin.py first.", file=sys.stderr)
-        sys.exit(1)
-    token = create_access_token(str(admin.id), "admin", None)
-    print(f"  Minted JWT for admin user: {admin.username}")
-    return token
+def _catalogue_list(data) -> list[dict] | None:
+    if isinstance(data, list) and data:
+        return data
+    if isinstance(data, dict):
+        for key in ("cameras", "items", "data", "results", "streams"):
+            if isinstance(data.get(key), list) and data[key]:
+                return data[key]
+    return None
 
 
 def fetch_sentinel_catalogue(sentinel_host: str) -> list[dict]:
-    """Try the Sentinel /api/ingest endpoint; fall back to known camera list."""
-    url = f"https://{sentinel_host}/api/ingest"
-    print(f"  Fetching catalogue from {url} ...")
-    try:
-        resp = httpx.get(url, timeout=10.0, follow_redirects=True)
-        if resp.status_code == 200:
-            data = resp.json()
-            if isinstance(data, list) and len(data) > 0:
-                print(f"  Got {len(data)} cameras from Sentinel API.")
-                return data
-            for key in ("cameras", "items", "data", "results"):
-                if isinstance(data, dict) and key in data and isinstance(data[key], list):
-                    print(f"  Got {len(data[key])} cameras from Sentinel API.")
-                    return data[key]
-        print(f"  Sentinel API returned {resp.status_code} — using built-in 30-camera list.")
-    except Exception as e:
-        print(f"  Could not reach Sentinel API ({e}) — using built-in 30-camera list.")
+    """Always start from /api/ingest per the Sentinel integration reference."""
+    auth = (SENTINEL_USERNAME, SENTINEL_PASSWORD) if SENTINEL_USERNAME and SENTINEL_PASSWORD else None
+    urls = [
+        f"http://{sentinel_host}/api/ingest",
+        f"https://{sentinel_host}/api/ingest",
+    ]
+    for url in urls:
+        print(f"  Fetching catalogue from {url} ...")
+        try:
+            resp = httpx.get(url, timeout=15.0, follow_redirects=True, auth=auth)
+            print(f"  HTTP {resp.status_code} from {url}")
+            if resp.status_code != 200:
+                continue
+            cameras = _catalogue_list(resp.json())
+            if cameras:
+                print(f"  Got {len(cameras)} cameras from Sentinel API.")
+                return cameras
+            print(f"  Unrecognised catalogue shape: {str(resp.text)[:200]}")
+        except Exception as e:
+            print(f"  Could not reach {url} ({e})")
 
-    # Convert known camera list to the expected format
+    print("  Using built-in 30-camera fallback list (catalogue unreachable).")
     return [
-        {
-            "id": c["id"],
-            "name": c["name"],
-            "latitude": c["lat"],
-            "longitude": c["lng"],
-        }
+        {"id": c["id"], "name": c["name"], "latitude": c["lat"], "longitude": c["lng"]}
         for c in KNOWN_CAMERAS
     ]
 
 
-def build_camera_payload(entry: dict, sentinel_host: str, department_id: str) -> dict | None:
-    """Build the POST /cameras payload from a catalogue entry."""
-    camera_id = entry.get("id") or entry.get("camera_id") or entry.get("stream_id")
-    if not camera_id:
-        return None
-
-    rtsp_url = (
-        entry.get("rtsp_url")
-        or entry.get("rtsp")
-        or (entry.get("urls") or {}).get("rtsp")
-        or (entry.get("streams") or {}).get("rtsp")
-        or f"rtsp://{sentinel_host}:8554/stream/{camera_id}"
-    )
-
-    lat = entry.get("latitude") or entry.get("lat") or (entry.get("location") or {}).get("lat") or 0.0
-    lng = entry.get("longitude") or entry.get("lng") or entry.get("lon") or (entry.get("location") or {}).get("lng") or 0.0
-
-    name = entry.get("name") or f"Sentinel Camera {camera_id}"
-    district = (entry.get("location") or {}).get("district") or _guess_district(name)
-
-    return {
-        "camera_code": f"SENTINEL-{camera_id}",
-        "name": name,
-        "protocol": "rtsp",
-        "stream_url": rtsp_url,
-        "codec": entry.get("codec"),
-        "resolution": entry.get("resolution"),
-        "fps": entry.get("fps"),
-        "department_id": department_id,
-        "is_public_domain": True,
-        "location": {
-            "name": name,
-            "district": district,
-            "latitude": float(lat),
-            "longitude": float(lng),
-        },
-    }
-
-
 def _guess_district(name: str) -> str:
-    """Guess district from camera name for display purposes."""
-    n = name.lower()
+    n = (name or "").lower()
     if any(x in n for x in ["ahmedabad", "paldi", "maninagar", "vatva", "navrangpura", "sg highway",
                               "cg road", "ashram", "relief", "prahladnagar", "bopal", "janpath",
-                              "chimanbhai", "sarkhej", "chandkheda", "sardar patel"]):
+                              "chiman", "sarkhej", "chandkheda", "sardar patel"]):
         return "Ahmedabad"
     if any(x in n for x in ["gandhinagar", "sector"]):
         return "Gandhinagar"
@@ -204,48 +143,184 @@ def _guess_district(name: str) -> str:
     return "Gujarat"
 
 
+def build_camera_payload(entry: dict, sentinel_host: str, department_id: str) -> dict | None:
+    camera_id = entry.get("id") or entry.get("camera_id") or entry.get("stream_id")
+    if camera_id is None:
+        return None
+    camera_id = str(camera_id)
+
+    location = entry.get("location") if isinstance(entry.get("location"), dict) else {}
+    rtsp_url = (
+        entry.get("rtsp_url")
+        or entry.get("rtsp")
+        or (entry.get("urls") or {}).get("rtsp")
+        or (entry.get("streams") or {}).get("rtsp")
+        or location.get("rtsp")
+        or f"rtsp://{sentinel_host}:8554/stream/{camera_id}"
+    )
+    rtsp_url = inject_rtsp_auth(rtsp_url, SENTINEL_USERNAME, SENTINEL_PASSWORD)
+
+    lat = entry.get("latitude") or entry.get("lat") or location.get("lat") or location.get("latitude") or 0.0
+    lng = (
+        entry.get("longitude") or entry.get("lng") or entry.get("lon")
+        or location.get("lng") or location.get("lon") or location.get("longitude") or 0.0
+    )
+    name = entry.get("name") or location.get("name") or f"Sentinel Camera {camera_id}"
+    district = location.get("district") or _guess_district(name)
+    props = entry.get("stream_properties") or entry.get("properties") or {}
+    fps = entry.get("fps") or props.get("fps")
+    try:
+        fps = int(fps) if fps is not None else None
+    except (TypeError, ValueError):
+        fps = None
+
+    return {
+        "camera_code": f"SENTINEL-{camera_id}",
+        "name": str(name),
+        "protocol": "rtsp",
+        "stream_url": rtsp_url,
+        "codec": entry.get("codec") or props.get("codec"),
+        "resolution": entry.get("resolution") or props.get("resolution"),
+        "fps": fps,
+        "department_id": department_id,
+        "is_public_domain": True,
+        "location": {
+            "name": str(name),
+            "district": district,
+            "latitude": float(lat) if lat is not None else 0.0,
+            "longitude": float(lng) if lng is not None else 0.0,
+        },
+    }
+
+
+async def get_or_create_department(db) -> str:
+    result = await db.execute(select(Department))
+    dept = result.scalars().first()
+    if dept:
+        print(f"  Using existing department: {dept.name} ({dept.id})")
+        return str(dept.id)
+
+    dept = Department(
+        name="Gujarat Police",
+        code="GUJ_POL",
+        description="Gujarat Police Home Department — CCTV Command Centre",
+        contact_email="cctv@gujaratpolice.gov.in",
+    )
+    db.add(dept)
+    await db.commit()
+    await db.refresh(dept)
+    print(f"  Created department: {dept.name} ({dept.id})")
+    return str(dept.id)
+
+
+async def ensure_admin(db) -> None:
+    result = await db.execute(
+        select(User).join(Role, User.role_id == Role.id).where(Role.name == "admin")
+    )
+    if result.scalars().first():
+        return
+    role_result = await db.execute(select(Role).where(Role.name == "admin"))
+    admin_role = role_result.scalar_one_or_none()
+    if not admin_role:
+        print("ERROR: No admin role in schema.", file=sys.stderr)
+        sys.exit(1)
+    password = os.getenv("ADMIN_PASSWORD", "admin123")
+    user = User(
+        username="admin",
+        email="admin@gujaratpolice.gov.in",
+        password_hash=hash_password(password),
+        role_id=admin_role.id,
+    )
+    db.add(user)
+    await db.commit()
+    print(f"  Created admin user 'admin' (password from ADMIN_PASSWORD / default admin123)")
+
+
+async def mint_admin_token(db) -> str:
+    result = await db.execute(
+        select(User).join(Role, User.role_id == Role.id).where(Role.name == "admin")
+    )
+    admin = result.scalars().first()
+    if not admin:
+        print("ERROR: No admin user found.", file=sys.stderr)
+        sys.exit(1)
+    token = create_access_token(str(admin.id), "admin", None)
+    print(f"  Minted JWT for admin user: {admin.username}")
+    return token
+
+
+def _index_existing(client: httpx.Client) -> dict[str, str]:
+    resp = client.get("/cameras", params={"limit": 500})
+    if resp.status_code != 200:
+        return {}
+    data = resp.json()
+    if not isinstance(data, list):
+        return {}
+    return {c["camera_code"]: c["id"] for c in data if c.get("camera_code") and c.get("id")}
+
+
 def onboard_cameras(token: str, department_id: str, cameras: list[dict], sentinel_host: str) -> dict:
-    created, skipped, errors = [], [], []
+    created, updated, errors = [], [], []
     headers = {"Authorization": f"Bearer {token}"}
-    with httpx.Client(base_url=BACKEND_URL, timeout=15.0, headers=headers) as client:
+    with httpx.Client(base_url=BACKEND_URL, timeout=20.0, headers=headers) as client:
+        existing = _index_existing(client)
         for entry in cameras:
             payload = build_camera_payload(entry, sentinel_host, department_id)
             if not payload:
-                errors.append({"id": entry.get("id", "?"), "error": "Could not build payload"})
+                errors.append({"id": str(entry.get("id", "?")), "error": "Could not build payload"})
                 continue
+            code = payload["camera_code"]
             try:
+                if code in existing:
+                    patch = client.patch(
+                        f"/cameras/{existing[code]}",
+                        json={
+                            "stream_url": payload["stream_url"],
+                            "status": "active",
+                            "codec": payload.get("codec"),
+                            "resolution": payload.get("resolution"),
+                            "fps": payload.get("fps"),
+                        },
+                    )
+                    if patch.status_code < 400:
+                        updated.append(code)
+                        print(f"  ~ Updated: {code} — {payload['name']}")
+                    else:
+                        errors.append({"code": code, "error": f"{patch.status_code}: {patch.text[:160]}"})
+                        print(f"  ✗ Update:  {code} — {patch.status_code}")
+                    continue
+
                 resp = client.post("/cameras", json=payload)
                 if resp.status_code == 201:
-                    created.append(payload["camera_code"])
-                    print(f"  ✓ Created: {payload['camera_code']} — {payload['name']}")
+                    created.append(code)
+                    cam_id = resp.json().get("id")
+                    if cam_id:
+                        existing[code] = cam_id
+                    print(f"  ✓ Created: {code} — {payload['name']}")
                 elif resp.status_code == 409:
-                    skipped.append(payload["camera_code"])
-                    print(f"  ~ Exists:  {payload['camera_code']}")
+                    existing = _index_existing(client)
+                    if code in existing:
+                        client.patch(
+                            f"/cameras/{existing[code]}",
+                            json={"stream_url": payload["stream_url"], "status": "active"},
+                        )
+                        updated.append(code)
+                        print(f"  ~ Exists:  {code} (stream URL refreshed)")
+                    else:
+                        errors.append({"code": code, "error": "409 but not found on list"})
                 else:
-                    errors.append({"code": payload["camera_code"], "error": f"{resp.status_code}: {resp.text[:120]}"})
-                    print(f"  ✗ Error:   {payload['camera_code']} — {resp.status_code}")
+                    errors.append({"code": code, "error": f"{resp.status_code}: {resp.text[:160]}"})
+                    print(f"  ✗ Error:   {code} — {resp.status_code} {resp.text[:120]}")
             except Exception as e:
                 errors.append({"code": payload.get("camera_code", "?"), "error": str(e)})
-    return {"created": created, "skipped": skipped, "errors": errors}
+    return {"created": created, "updated": updated, "errors": errors}
 
 
-async def activate_cameras(token: str):
-    """Run health check on all cameras to flip their status to active."""
+def activate_all(token: str) -> None:
     headers = {"Authorization": f"Bearer {token}"}
-    print("\nRunning health checks to activate cameras...")
-    with httpx.Client(base_url=BACKEND_URL, timeout=30.0, headers=headers) as client:
-        resp = client.get("/cameras", params={"limit": 100})
-        if resp.status_code != 200:
-            print(f"  Could not fetch camera list: {resp.status_code}")
-            return
-        cameras = resp.json()
-        for cam in cameras:
-            try:
-                hc = client.post(f"/cameras/{cam['id']}/health-check")
-                status = hc.json().get("is_reachable", False)
-                print(f"  {'✓' if status else '~'} {cam['camera_code']} — {'reachable' if status else 'not reachable (stream may not be live yet)'}")
-            except Exception as e:
-                print(f"  ? {cam['camera_code']} — health check error: {e}")
+    with httpx.Client(base_url=BACKEND_URL, timeout=20.0, headers=headers) as client:
+        resp = client.post("/cameras/activate-all")
+        print(f"  activate-all -> {resp.status_code} {resp.text[:200]}")
 
 
 async def main(sentinel_host: str, skip_activate: bool):
@@ -253,41 +328,41 @@ async def main(sentinel_host: str, skip_activate: bool):
     print("Gujarat CCTV Platform — Camera Setup")
     print("=" * 60)
 
-    async with AsyncSessionLocal() as db:
-        print("\n[1/4] Setting up department...")
-        department_id = await get_or_create_department(db)
+    if not SENTINEL_PASSWORD:
+        print("WARNING: SENTINEL_PASSWORD is empty — RTSP URLs will have no credentials.", file=sys.stderr)
 
-        print("\n[2/4] Minting admin token...")
+    async with AsyncSessionLocal() as db:
+        print("\n[1/5] Setting up department...")
+        department_id = await get_or_create_department(db)
+        print("\n[2/5] Ensuring admin user...")
+        await ensure_admin(db)
+        print("\n[3/5] Minting admin token...")
         token = await mint_admin_token(db)
 
-    print(f"\n[3/4] Fetching camera catalogue from Sentinel ({sentinel_host})...")
+    print(f"\n[4/5] Fetching camera catalogue from Sentinel ({sentinel_host})...")
     cameras = fetch_sentinel_catalogue(sentinel_host)
 
-    print(f"\n[4/4] Onboarding {len(cameras)} cameras...")
+    print(f"\n[5/5] Onboarding {len(cameras)} cameras...")
     result = onboard_cameras(token, department_id, cameras, sentinel_host)
 
     print("\n" + "=" * 60)
     print(f"  Created : {len(result['created'])}")
-    print(f"  Skipped : {len(result['skipped'])} (already in registry)")
+    print(f"  Updated : {len(result['updated'])}")
     print(f"  Errors  : {len(result['errors'])}")
     for err in result["errors"]:
         print(f"    {err}")
 
     if not skip_activate:
-        await activate_cameras(token)
+        print("\nActivating all cameras in registry...")
+        activate_all(token)
 
-    print("\n✅ Done! Cameras are now in the registry.")
-    print("   gateway_sync will register them in MediaMTX within 30 seconds.")
-    print("   Refresh the dashboard to see cameras on the map.")
+    print("\nDone. Refresh the dashboard. gateway_sync will register MediaMTX paths.")
     print("=" * 60)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--sentinel-host", default=DEFAULT_SENTINEL_HOST,
-                        help=f"Sentinel sandbox host (default: {DEFAULT_SENTINEL_HOST})")
-    parser.add_argument("--skip-activate", action="store_true",
-                        help="Skip the health-check activation step")
+    parser.add_argument("--sentinel-host", default=DEFAULT_SENTINEL_HOST)
+    parser.add_argument("--skip-activate", action="store_true")
     args = parser.parse_args()
     asyncio.run(main(args.sentinel_host, args.skip_activate))
-

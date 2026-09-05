@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models import Camera, Location, CameraHealth
-from app.schemas import CameraCreate, CameraOut, CameraHealthOut
+from app.schemas import CameraCreate, CameraOut, CameraHealthOut, CameraUpdate
 from app.adapters.registry import get_adapter
 from app.core.deps import require_role, get_current_user, get_current_user_or_service, CurrentUser, resolve_department_scope, UNRESTRICTED_ROLES
 from app.core.audit import write_audit_log
@@ -141,7 +141,13 @@ async def list_cameras(
     if status:
         query = query.where(Camera.status == status)
     result = await db.execute(query)
-    return result.scalars().all()
+    cameras = result.scalars().all()
+    # Do not send RTSP credentials to the browser. The AI worker and
+    # stream-gateway sync use X-API-Key (role=service) and still receive URLs.
+    if current_user.role != "service":
+        for cam in cameras:
+            cam.stream_url = None
+    return cameras
 
 
 @router.get("/gis", summary="Cameras with lat/long for GIS map rendering")
@@ -186,7 +192,51 @@ async def get_camera(
             # 404, not 403 — don't reveal that a camera with this ID exists
             # in a department the caller can't see.
             raise HTTPException(status_code=404, detail="Camera not found")
+    if current_user.role != "service":
+        camera.stream_url = None
     return camera
+
+
+@router.patch("/{camera_id}", response_model=CameraOut)
+async def update_camera(
+    camera_id: uuid.UUID,
+    payload: CameraUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_role("admin", "operator")),
+):
+    camera = await db.get(Camera, camera_id)
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    updates = payload.model_dump(exclude_unset=True)
+    for key, value in updates.items():
+        setattr(camera, key, value)
+    await db.commit()
+    await db.refresh(camera)
+    if current_user.role != "service":
+        camera.stream_url = None
+    return camera
+
+
+@router.post("/activate-all")
+async def activate_all_cameras(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_role("admin", "operator")),
+):
+    """
+    Marks every registered camera active without an RTSP probe.
+
+    Assumption (not specified by the problem statement): the Sentinel
+    catalogue live flag / successful onboarding is sufficient for the
+    hackathon PoC so we do not sequentially probe ~50 RTSP endpoints
+    (that can take minutes and still flap). The AI worker and MediaMTX
+    reconnect independently if a feed is actually down.
+    """
+    result = await db.execute(select(Camera))
+    cameras = result.scalars().all()
+    for cam in cameras:
+        cam.status = "active"
+    await db.commit()
+    return {"activated": len(cameras)}
 
 
 @router.post("/{camera_id}/health-check", response_model=CameraHealthOut)

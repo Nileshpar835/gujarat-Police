@@ -24,6 +24,7 @@ def process_frame(
     detector: VehicleDetector,
     backend: BackendClient,
     frame_timestamp: datetime | None = None,
+    video_timestamp_ref: str | None = None,
 ) -> list[dict]:
     """
     Runs the full detect -> ANPR -> submit pipeline on a single frame.
@@ -56,6 +57,7 @@ def process_frame(
                 vehicle_type=vd.class_name,
                 bounding_box={"x1": vd.bbox[0], "y1": vd.bbox[1], "x2": vd.bbox[2], "y2": vd.bbox[3]},
                 detected_at=frame_timestamp,
+                video_timestamp_ref=video_timestamp_ref,
             )
             results.append(result)
         except Exception as exc:  # noqa: BLE001 - one failed submission shouldn't kill the pipeline

@@ -70,6 +70,14 @@ class CameraOut(BaseModel):
     onboarded_at: datetime
 
 
+class CameraUpdate(BaseModel):
+    stream_url: Optional[str] = None
+    status: Optional[str] = Field(default=None, pattern="^(active|inactive|maintenance|decommissioned)$")
+    codec: Optional[str] = None
+    resolution: Optional[str] = None
+    fps: Optional[int] = None
+
+
 class CameraHealthOut(BaseModel):
     is_reachable: bool
     latency_ms: Optional[int] = None
