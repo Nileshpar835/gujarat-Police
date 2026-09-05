@@ -6,6 +6,7 @@ match -> alert workflow described in HLD Section 8.
 """
 
 import logging
+import re
 from datetime import datetime, timezone
 
 import numpy as np
@@ -16,6 +17,10 @@ from backend_client import BackendClient
 from config import config
 
 logger = logging.getLogger(__name__)
+
+# Indian plates are typically 8–11 alphanumeric characters (e.g. GJ01AB1234).
+# Short OCR fragments with no letters+digits are almost always scene text, not plates.
+_PLATE_LIKE = re.compile(r"^(?=.*[A-Z])(?=.*\d)[A-Z0-9]{6,13}$")
 
 
 def process_frame(
@@ -45,7 +50,10 @@ def process_frame(
 
         logger.info("Camera %s: Read plate candidate '%s' (conf: %.2f)", camera_id, plate_read.raw_text, plate_read.ocr_confidence)
 
-        if len(plate_read.raw_text) < 4:
+        cleaned = re.sub(r"[^A-Za-z0-9]", "", plate_read.raw_text).upper()
+        if not _PLATE_LIKE.match(cleaned):
+            continue
+        if plate_read.ocr_confidence < config.ocr_confidence_threshold:
             continue
 
         try:

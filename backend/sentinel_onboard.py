@@ -45,19 +45,36 @@ import httpx
 
 
 def fetch_catalogue(sentinel_host: str) -> list[dict]:
-    url = f"http://{sentinel_host}/api/ingest"
-    resp = httpx.get(url, timeout=15.0)
-    resp.raise_for_status()
-    data = resp.json()
-    # Defensive: handle either a bare list or a {"cameras": [...]} wrapper.
+    import os
+    cdn = os.getenv("SENTINEL_CDN", "https://cctv.corp8.cloud")
+    user = os.getenv("SENTINEL_USERNAME", "")
+    password = os.getenv("SENTINEL_PASSWORD", "")
+    auth = (user, password) if user and password else None
+    urls = [
+        f"{cdn.rstrip('/')}/cameras.json",
+        "https://cctv.corp8.cloud/cameras.json",
+        f"http://{sentinel_host}/api/ingest",
+    ]
+    last_error = None
+    data = None
+    for url in urls:
+        try:
+            resp = httpx.get(url, timeout=15.0, auth=auth, follow_redirects=True)
+            resp.raise_for_status()
+            data = resp.json()
+            break
+        except Exception as exc:
+            last_error = exc
+    if data is None:
+        raise last_error or RuntimeError("catalogue fetch failed")
     if isinstance(data, dict):
         for key in ("cameras", "items", "data", "results"):
             if key in data and isinstance(data[key], list):
                 return data[key]
-        raise ValueError(f"Unrecognised /api/ingest response shape: top-level keys {list(data.keys())}")
+        raise ValueError(f"Unrecognised catalogue shape: top-level keys {list(data.keys())}")
     if isinstance(data, list):
         return data
-    raise ValueError(f"Unrecognised /api/ingest response type: {type(data)}")
+    raise ValueError(f"Unrecognised catalogue response type: {type(data)}")
 
 
 def _extract_camera_fields(entry: dict, sentinel_host: str) -> dict | None:

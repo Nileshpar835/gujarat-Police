@@ -9,15 +9,16 @@ import Hls from "hls.js";
  *   - Staggered Scheduling: Jitters stream starts so multiple grid cameras do not
  *     saturate gateway connections concurrently
  *   - On-Demand Gateway Sync: Polite retries give MediaMTX time to pull RTSP keyframes
- *   - Dual-Source Fallback: MediaMTX local gateway -> Sentinel CDN direct
- *   - Memory Cleanup: Destroys HLS instance & releases decoders when hidden or unmounted
+ *   - Dual-Source Fallback: Sentinel CDN HLS (dashboards) -> local MediaMTX RTSP relay
  */
+
+const SENTINEL_CDN_ORIGIN = "https://cctv.corp8.cloud";
 
 function buildSources(cameraCode, gatewayBase) {
   const camId = cameraCode.replace(/^SENTINEL-/i, "");
   return [
+    `/sentinel-hls/${camId}/index.m3u8`,
     `${gatewayBase}/${cameraCode}/index.m3u8`,
-    `/sentinel-live/live/stream/${camId}/index.m3u8`,
   ];
 }
 

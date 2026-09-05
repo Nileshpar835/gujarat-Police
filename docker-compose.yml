@@ -37,7 +37,7 @@ services:
       AI_WORKER_API_KEY: "${AI_WORKER_API_KEY:?set a real key in .env for anything beyond local dev}"
       SENTINEL_HOST: "${SENTINEL_HOST:-103.250.160.189}"
       SENTINEL_USERNAME: "${SENTINEL_USERNAME:-}"
-      SENTINEL_PASSWORD: "${SENTINEL_PASSWORD:-}"
+      SENTINEL_CDN: "${SENTINEL_CDN:-https://cctv.corp8.cloud}"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:-admin123}"
     ports:
       - "8000:8000"

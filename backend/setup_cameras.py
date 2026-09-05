@@ -4,8 +4,9 @@ One-shot camera onboarding script.
 Does everything in one command:
   1. Creates a "Gujarat Police" department (if none exists)
   2. Ensures an admin user exists
-  3. Fetches the Sentinel camera catalogue from /api/ingest (with auth)
+  3. Fetches the Sentinel camera catalogue from https://cctv.corp8.cloud/cameras.json
   4. Onboards/updates cameras with authenticated RTSP URLs
+     (rtsp://email:password@103.250.160.189:8554/stream/<id>, @ in email as %40)
   5. Marks cameras active so AI worker + MediaMTX pick them up
 
 Usage (run inside cctv_backend container):
@@ -26,6 +27,7 @@ from app.models import User, Role, Department
 from app.core.security import create_access_token, hash_password
 
 DEFAULT_SENTINEL_HOST = os.getenv("SENTINEL_HOST", "103.250.160.189")
+SENTINEL_CDN = os.getenv("SENTINEL_CDN", "https://cctv.corp8.cloud")
 SENTINEL_USERNAME = os.getenv("SENTINEL_USERNAME", "nileshpar835@gmail.com")
 SENTINEL_PASSWORD = os.getenv("SENTINEL_PASSWORD", "")
 BACKEND_URL = os.getenv("SETUP_BACKEND_URL", "http://localhost:8000/api/v1")
@@ -88,9 +90,11 @@ def _catalogue_list(data) -> list[dict] | None:
 
 
 def fetch_sentinel_catalogue(sentinel_host: str) -> list[dict]:
-    """Always start from /api/ingest per the Sentinel integration reference."""
+    """Start from cameras.json (current Sentinel contract), not hard-coded IDs."""
     auth = (SENTINEL_USERNAME, SENTINEL_PASSWORD) if SENTINEL_USERNAME and SENTINEL_PASSWORD else None
     urls = [
+        f"{SENTINEL_CDN.rstrip('/')}/cameras.json",
+        f"https://cctv.corp8.cloud/cameras.json",
         f"http://{sentinel_host}/api/ingest",
         f"https://{sentinel_host}/api/ingest",
     ]
@@ -103,7 +107,7 @@ def fetch_sentinel_catalogue(sentinel_host: str) -> list[dict]:
                 continue
             cameras = _catalogue_list(resp.json())
             if cameras:
-                print(f"  Got {len(cameras)} cameras from Sentinel API.")
+                print(f"  Got {len(cameras)} cameras from Sentinel catalogue.")
                 return cameras
             print(f"  Unrecognised catalogue shape: {str(resp.text)[:200]}")
         except Exception as e:
@@ -156,8 +160,10 @@ def build_camera_payload(entry: dict, sentinel_host: str, department_id: str) ->
         or (entry.get("urls") or {}).get("rtsp")
         or (entry.get("streams") or {}).get("rtsp")
         or location.get("rtsp")
-        or f"rtsp://{sentinel_host}:8554/stream/{camera_id}"
     )
+    if not rtsp_url or not str(rtsp_url).startswith("rtsp://"):
+        # Official RTSP is always on the public static IP, never the HLS CDN.
+        rtsp_url = f"rtsp://{sentinel_host}:8554/stream/{camera_id}"
     rtsp_url = inject_rtsp_auth(rtsp_url, SENTINEL_USERNAME, SENTINEL_PASSWORD)
 
     lat = entry.get("latitude") or entry.get("lat") or location.get("lat") or location.get("latitude") or 0.0

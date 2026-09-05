@@ -5,8 +5,7 @@ import react from "@vitejs/plugin-react";
 // is reachable as "backend", not "localhost").
 const backendTarget = process.env.VITE_BACKEND_PROXY_TARGET || "http://localhost:8000";
 const streamGatewayTarget = process.env.VITE_STREAM_GATEWAY_PROXY_TARGET || "http://localhost:8888";
-const sentinelHost = process.env.VITE_SENTINEL_HOST || "103.250.160.189";
-const sentinelTarget = sentinelHost.startsWith("http") ? sentinelHost : `http://${sentinelHost}`;
+const sentinelCdn = process.env.VITE_SENTINEL_CDN || "https://cctv.corp8.cloud";
 const sentinelUser = process.env.VITE_SENTINEL_USERNAME || "";
 const sentinelPass = process.env.VITE_SENTINEL_PASSWORD || "";
 
@@ -58,12 +57,12 @@ export default defineConfig({
           });
         },
       },
-      // Official Sentinel HLS: http://<host>/live/stream/<id>/index.m3u8
-      // Browser cannot attach RTSP basic-auth, so we proxy with credentials here.
-      "/sentinel-live": {
-        target: sentinelTarget,
+      // Official Sentinel HLS CDN for dashboards: https://cctv.corp8.cloud/<id>/index.m3u8
+      "/sentinel-hls": {
+        target: sentinelCdn,
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/sentinel-live/, ""),
+        secure: true,
+        rewrite: (path) => path.replace(/^\/sentinel-hls/, ""),
         configure: (proxy) => {
           proxy.on("proxyReq", (proxyReq) => {
             if (sentinelUser) {

@@ -75,7 +75,7 @@ def upsert_path(client: httpx.Client, camera_code: str, stream_url: str, path_ex
     if resp.status_code >= 400:
         logger.error("Failed to %s path for %s: %s %s", endpoint, camera_code, resp.status_code, resp.text)
     else:
-        logger.info("%s path for camera %s -> %s", "Updated" if path_exists else "Registered", camera_code, stream_url)
+        logger.info("%s path for camera %s", "Updated" if path_exists else "Registered", camera_code)
 
 
 def remove_path(client: httpx.Client, camera_code: str):
