@@ -78,6 +78,8 @@ services:
       BACKEND_BASE_URL: "http://backend:8000/api/v1"
       MEDIAMTX_API_URL: "http://stream-gateway:9997"
       AI_WORKER_API_KEY: "${AI_WORKER_API_KEY:?set a real key in .env for anything beyond local dev}"
+    volumes:
+      - ./stream-gateway/gateway_sync.py:/app/gateway_sync.py
 
   dashboard:
     build: ./dashboard

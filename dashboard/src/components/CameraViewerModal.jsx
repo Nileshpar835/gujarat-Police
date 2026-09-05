@@ -52,7 +52,7 @@ export default function CameraViewerModal({ camera, streamGatewayBaseUrl, onClos
           </button>
         </div>
         <div style={{ aspectRatio: "16/9" }}>
-          <LiveVideoPlayer cameraCode={camera.camera_code} streamGatewayBaseUrl={streamGatewayBaseUrl} />
+          <LiveVideoPlayer cameraCode={camera.camera_code} streamGatewayBaseUrl={streamGatewayBaseUrl} lazy={false} />
         </div>
       </div>
     </div>

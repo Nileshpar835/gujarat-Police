@@ -151,6 +151,8 @@ export default function CameraGrid({ cameras = [], streamGatewayBaseUrl }) {
                   <LiveVideoPlayer
                     cameraCode={cam.camera_code}
                     streamGatewayBaseUrl={streamGatewayBaseUrl}
+                    lazy={true}
+                    staggerIndex={i}
                   />
                   {/* Overlay label */}
                   <div
