@@ -49,6 +49,6 @@ webrtcAllowOrigins: ["*"]
 # produces corrupt frames that look like model bugs"). gateway_sync.py
 # also sets this explicitly per-path when registering cameras, as
 # belt-and-suspenders — this default covers any path added another way.
-rtspTransport: tcp
+# rtspTransport: tcp
 
 paths: {}
