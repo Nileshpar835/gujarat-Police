@@ -10,7 +10,7 @@ class WorkerConfig:
     # AI pipeline tuning (see HLD Section 9)
     detection_confidence_threshold: float = float(os.getenv("DETECTION_CONFIDENCE_THRESHOLD", "0.5"))
     ocr_confidence_threshold: float = float(os.getenv("OCR_CONFIDENCE_THRESHOLD", "0.60"))
-    sample_fps: float = float(os.getenv("SAMPLE_FPS", "5"))  # frames/sec sampled from each camera, not full FPS
+    sample_fps: float = float(os.getenv("SAMPLE_FPS", "1.0"))  # frames/sec sampled from each camera, not full FPS
     camera_poll_interval_seconds: int = int(os.getenv("CAMERA_POLL_INTERVAL_SECONDS", "30"))
 
     # COCO class IDs relevant to vehicle detection (YOLOv8 default weights)

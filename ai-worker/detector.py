@@ -5,6 +5,7 @@ concurrent 50-camera load" but the nano model runs adequately on CPU for
 lower concurrency / single-camera testing).
 """
 
+import threading
 import logging
 from dataclasses import dataclass
 
@@ -28,15 +29,17 @@ class VehicleDetector:
     def __init__(self, weights: str = "yolov8n.pt"):
         logger.info("Loading vehicle detection model: %s", weights)
         self.model = YOLO(weights)
+        self._lock = threading.Lock()
 
     def detect(self, frame: np.ndarray) -> list[VehicleDetection]:
         """Runs detection on a single frame, returns only vehicle-class detections above threshold."""
-        results = self.model.predict(
-            frame,
-            classes=list(config.vehicle_class_ids),
-            conf=config.detection_confidence_threshold,
-            verbose=False,
-        )
+        with self._lock:
+            results = self.model.predict(
+                frame,
+                classes=list(config.vehicle_class_ids),
+                conf=config.detection_confidence_threshold,
+                verbose=False,
+            )
         detections = []
         for r in results:
             for box in r.boxes:

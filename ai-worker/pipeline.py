@@ -34,14 +34,16 @@ def process_frame(
     vehicle_detections = detector.detect(frame)
     results = []
 
+    if vehicle_detections:
+        logger.info("Camera %s: Detected %d vehicle(s)", camera_id, len(vehicle_detections))
+
     for vd in vehicle_detections:
         plate_read = read_plate(frame, vd.bbox)
         if plate_read is None or not plate_read.raw_text:
             continue
 
-        # Submission always happens — the backend itself applies the
-        # OCR-confidence gate before attempting a watchlist match (Section 8).
-        # We still avoid submitting pure noise reads (empty/very short strings).
+        logger.info("Camera %s: Read plate candidate '%s' (conf: %.2f)", camera_id, plate_read.raw_text, plate_read.ocr_confidence)
+
         if len(plate_read.raw_text) < 4:
             continue
 

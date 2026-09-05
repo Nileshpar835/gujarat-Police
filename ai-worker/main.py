@@ -9,6 +9,7 @@ HLD — this worker doesn't need to know about specific vendors, only the
 normalised camera list the backend already exposes).
 """
 
+import os
 import logging
 import time
 
@@ -29,6 +30,8 @@ def main():
     logger.info("AI worker started. Polling %s for active cameras every %ss",
                 config.backend_base_url, config.camera_poll_interval_seconds)
 
+    MAX_CONCURRENT_CAMERAS = int(os.getenv("MAX_CONCURRENT_CAMERAS", "6"))
+
     while True:
         try:
             cameras = backend.list_active_cameras()
@@ -37,16 +40,17 @@ def main():
             time.sleep(config.camera_poll_interval_seconds)
             continue
 
-        current_ids = {c["id"] for c in cameras}
+        target_cameras = cameras[:MAX_CONCURRENT_CAMERAS]
+        current_ids = {c["id"] for c in target_cameras}
 
-        # start workers for newly-active cameras
-        for cam in cameras:
+        # start workers for newly-active cameras within quota
+        for cam in target_cameras:
             if cam["id"] not in active_workers:
                 worker = CameraWorker(cam, detector, backend)
                 worker.start()
                 active_workers[cam["id"]] = worker
 
-        # stop workers for cameras that are no longer active
+        # stop workers for cameras that are no longer in target set
         for cam_id in list(active_workers.keys()):
             if cam_id not in current_ids:
                 active_workers[cam_id].stop()
