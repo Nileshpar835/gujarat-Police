@@ -58,11 +58,6 @@ export default function LiveVideoPlayer({ cameraCode, streamGatewayBaseUrl }) {
 
       hls.on(Hls.Events.ERROR, (_evt, data) => {
         if (data.fatal) {
-          // If direct Sentinel stream fails (e.g. CORS), fallback to local gateway
-          if (src === sentinelUrl) {
-            hls.loadSource(localUrl);
-            return;
-          }
           setStatus("error");
           hls.destroy();
           hlsRef.current = null;
