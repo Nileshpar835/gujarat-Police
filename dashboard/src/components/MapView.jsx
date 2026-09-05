@@ -3,7 +3,14 @@ import { MapContainer, TileLayer, CircleMarker, Popup, Polyline, Marker } from "
 import L from "leaflet";
 
 const GUJARAT_CENTER = [22.6, 71.6];
-const CARTO_API_KEY = "cb1_2xmo_1_9b12b7c0f3f90fce9c989d81";
+
+// CARTO Dark Matter raster tiles with API key.
+// The {s}.basemaps.cartocdn.com/dark_all/ path is the working authenticated URL —
+// it was loading tiles correctly before; adding ?key= removes the watermark.
+// The /rastertiles/ path shown in their email example requires a different CDN
+// setup and 404s from Docker (basemaps.cartocdn.com without subdomains).
+const CARTO_TILE_URL =
+  "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=cb1_2xmo_1_9b12b7c0f3f90fce9c989d81";
 
 const STATUS_COLOR = {
   active: "#3dd6c4",
@@ -42,8 +49,7 @@ export default function MapView({ cameras, activeRoute, onCameraClick }) {
       zoomControl={true}
     >
       <TileLayer
-        // CARTO Dark Matter with API key — professional government-grade basemap
-        url={`https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?api_key=${CARTO_API_KEY}`}
+        url={CARTO_TILE_URL}
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
         subdomains="abcd"
         maxZoom={19}

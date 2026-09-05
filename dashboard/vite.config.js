@@ -11,6 +11,14 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     port: 5173,
+    // On Windows with Docker volume mounts, inotify events don't cross the
+    // host→container boundary, so Vite's native watcher never fires and HMR
+    // silently stops working. Polling every 300ms fixes this without needing
+    // a container restart every time a source file changes.
+    watch: {
+      usePolling: true,
+      interval: 300,
+    },
     proxy: {
       // avoids CORS friction during local dev; production should hit the
       // API gateway directly per the HLD security architecture.
