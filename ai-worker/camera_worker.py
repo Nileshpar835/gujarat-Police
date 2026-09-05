@@ -42,13 +42,19 @@ from config import config
 logger = logging.getLogger(__name__)
 
 RECONNECT_BACKOFF_START_SECONDS = 2
-RECONNECT_BACKOFF_CAP_SECONDS = 30
+RECONNECT_BACKOFF_CAP_SECONDS = 10   # reduced from 30s — fail-fast for dropped Sentinel streams
+# Seconds without a successful frame read before we treat the stream as dead.
+FRAME_STALL_TIMEOUT_SECONDS = 15
 
 
 def open_rtsp_capture_tcp(stream_url: str) -> cv2.VideoCapture:
     """Opens an RTSP stream with transport forced to TCP (see module docstring)."""
-    os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
-    return cv2.VideoCapture(stream_url, cv2.CAP_FFMPEG)
+    os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|stimeout;5000000"
+    cap = cv2.VideoCapture(stream_url, cv2.CAP_FFMPEG)
+    # Give the decoder up to 5 s to produce its first frame
+    cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5000)
+    cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 5000)
+    return cap
 
 
 class CameraWorker(threading.Thread):
@@ -77,26 +83,39 @@ class CameraWorker(threading.Thread):
         frame_interval = 1.0 / config.sample_fps
         last_processed = 0.0
         backoff_seconds = RECONNECT_BACKOFF_START_SECONDS
+        last_frame_time = time.monotonic()
 
         try:
             while not self._stop_event.is_set():
                 ok, frame = cap.read()
-                if not ok:
-                    logger.warning(
-                        "Lost stream for camera %s, reconnecting in %ss",
-                        self.camera["camera_code"], backoff_seconds,
-                    )
+
+                # Stall detection: if we haven't received ANY frame in the timeout window,
+                # treat it the same as ok=False to force a reconnect.
+                now = time.monotonic()
+                if not ok or (now - last_frame_time) > FRAME_STALL_TIMEOUT_SECONDS:
+                    if not ok:
+                        logger.warning(
+                            "Lost stream for camera %s, reconnecting in %ss",
+                            self.camera["camera_code"], backoff_seconds,
+                        )
+                    else:
+                        logger.warning(
+                            "Stream stall detected for camera %s (no frame for %ss), reconnecting",
+                            self.camera["camera_code"], FRAME_STALL_TIMEOUT_SECONDS,
+                        )
                     cap.release()
                     if self._stop_event.wait(timeout=backoff_seconds):
-                        break  # stop() called during the backoff wait
+                        break
                     cap = open_rtsp_capture_tcp(stream_url)
                     if cap.isOpened():
-                        backoff_seconds = RECONNECT_BACKOFF_START_SECONDS  # reset on success
+                        backoff_seconds = RECONNECT_BACKOFF_START_SECONDS
+                        last_frame_time = time.monotonic()
                     else:
                         backoff_seconds = min(backoff_seconds * 2, RECONNECT_BACKOFF_CAP_SECONDS)
                     continue
 
-                now = time.monotonic()
+                last_frame_time = now  # got a valid frame
+
                 if now - last_processed < frame_interval:
                     continue  # drop frame — keeps us at sample_fps regardless of source FPS
                 last_processed = now

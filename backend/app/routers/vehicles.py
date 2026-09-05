@@ -12,6 +12,33 @@ from app.core.deps import get_current_user, CurrentUser
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 
 
+# IMPORTANT: /search must be defined BEFORE /{registration_number}/route.
+# FastAPI matches routes in declaration order; if the parameterised route
+# comes first, the literal word "search" is captured as a plate number.
+@router.get("/search")
+async def search_vehicles(
+    q: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Fuzzy plate search for the dashboard's vehicle search box."""
+    normalized = normalize_plate(q)
+    result = await db.execute(
+        select(Vehicle).where(Vehicle.registration_number.ilike(f"%{normalized}%")).limit(20)
+    )
+    vehicles = result.scalars().all()
+    return [
+        {
+            "registration_number": v.registration_number,
+            "vehicle_type": v.vehicle_type,
+            "color": v.color,
+            "first_seen_at": v.first_seen_at.isoformat() if v.first_seen_at else None,
+            "last_seen_at": v.last_seen_at.isoformat() if v.last_seen_at else None,
+        }
+        for v in vehicles
+    ]
+
+
 @router.get("/{registration_number}/route")
 async def get_vehicle_route(
     registration_number: str,
@@ -77,27 +104,3 @@ async def get_vehicle_route(
         "camera_sequence": [r["camera_code"] for r in route],
         "route": route,
     }
-
-
-@router.get("/search")
-async def search_vehicles(
-    q: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
-):
-    """Fuzzy plate search for the dashboard's vehicle search box."""
-    normalized = normalize_plate(q)
-    result = await db.execute(
-        select(Vehicle).where(Vehicle.registration_number.ilike(f"%{normalized}%")).limit(20)
-    )
-    vehicles = result.scalars().all()
-    return [
-        {
-            "registration_number": v.registration_number,
-            "vehicle_type": v.vehicle_type,
-            "color": v.color,
-            "first_seen_at": v.first_seen_at.isoformat() if v.first_seen_at else None,
-            "last_seen_at": v.last_seen_at.isoformat() if v.last_seen_at else None,
-        }
-        for v in vehicles
-    ]
