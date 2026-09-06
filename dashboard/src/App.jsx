@@ -46,6 +46,7 @@ export default function App() {
         getCamerasGis(),
         getAlerts({ limit: 50 }),
       ]);
+      setCameras(camerasData);
       setCameras((prev) => {
         if (
           prev.length === camerasData.length &&

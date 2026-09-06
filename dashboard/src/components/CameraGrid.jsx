@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, memo } from "react";
+import React, { useState, useMemo, useEffect, useCallback, memo } from "react";
 import CameraPlayer from "./CameraPlayer.jsx";
 import { normalizeCameraId } from "../utils/streamUrlBuilder.js";
 
@@ -8,6 +8,16 @@ const GRID_PRESETS = [
   { id: "grid9", label: "3×3 (9)", cols: 3, max: 9 },
   { id: "grid4", label: "2×2 (4)", cols: 2, max: 4 },
 ];
+
+function getResponsiveColumns() {
+  if (typeof window === "undefined") return 5;
+  const w = window.innerWidth;
+  if (w < 640) return 1;
+  if (w < 900) return 2;
+  if (w < 1200) return 3;
+  if (w < 1600) return 4;
+  return 5;
+}
 
 // Memoized individual camera tile to prevent re-renders of all tiles when one changes
 const CameraTile = memo(function CameraTile({
@@ -141,14 +151,12 @@ const CameraTile = memo(function CameraTile({
 });
 
 export default function CameraGrid({ cameras = [], streamGatewayBaseUrl = "/hls" }) {
-  const [selectedPreset, setSelectedPreset] = useState(GRID_PRESETS[0]); // Default to 30-Wall
+  const [selectedPreset, setSelectedPreset] = useState(GRID_PRESETS[0]);
+  const [responsiveCols, setResponsiveCols] = useState(getResponsiveColumns);
   const [slots, setSlots] = useState(() => {
-    // Initialise 30 slots pre-filled with active cameras if available
     const active = (cameras || []).filter((c) => c && c.status === "active");
     const initial = Array(30).fill(null);
-    active.slice(0, 30).forEach((cam, i) => {
-      initial[i] = cam;
-    });
+    active.slice(0, 30).forEach((cam, i) => { initial[i] = cam; });
     return initial;
   });
 
@@ -162,16 +170,19 @@ export default function CameraGrid({ cameras = [], streamGatewayBaseUrl = "/hls"
     [cameras]
   );
 
-  // Auto-fill slots if cameras loaded after initial mount
-  useMemo(() => {
+  useEffect(() => {
+    const onResize = () => setResponsiveCols(getResponsiveColumns());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  useEffect(() => {
     if (activeCameras.length > 0 && slots.every((s) => s === null)) {
       const nextSlots = Array(selectedPreset.max).fill(null);
-      activeCameras.slice(0, selectedPreset.max).forEach((cam, i) => {
-        nextSlots[i] = cam;
-      });
+      activeCameras.slice(0, selectedPreset.max).forEach((cam, i) => { nextSlots[i] = cam; });
       setSlots(nextSlots);
     }
-  }, [activeCameras]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeCameras, selectedPreset.max]);
 
   // Handle status update from individual players
   const handleStatusChange = useCallback((camId, status) => {
@@ -256,6 +267,7 @@ export default function CameraGrid({ cameras = [], streamGatewayBaseUrl = "/hls"
     setActiveSlot(null);
   };
 
+  const effectiveCols = Math.min(responsiveCols, selectedPreset.cols);
   const displayedSlots = slots.slice(0, selectedPreset.max);
 
   return (
@@ -387,7 +399,7 @@ export default function CameraGrid({ cameras = [], streamGatewayBaseUrl = "/hls"
           style={{
             flex: 1,
             display: "grid",
-            gridTemplateColumns: `repeat(${selectedPreset.cols}, minmax(0, 1fr))`,
+            gridTemplateColumns: `repeat(${effectiveCols}, minmax(0, 1fr))`,
             gridAutoRows: selectedPreset.max >= 25 ? "minmax(130px, 1fr)" : "minmax(180px, 1fr)",
             gap: 4,
             padding: 5,
