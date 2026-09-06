@@ -10,8 +10,7 @@ export default function CameraViewerModal({ camera, streamGatewayBaseUrl, onClos
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0, 0, 0, 0.75)",
-        backdropFilter: "blur(4px)",
+        background: "rgba(0,0,0,0.9)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -22,47 +21,44 @@ export default function CameraViewerModal({ camera, streamGatewayBaseUrl, onClos
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: 820,
+          width: 900,
           maxWidth: "95vw",
-          background: "#080c12",
-          border: "1px solid #1e293b",
-          borderRadius: 8,
+          background: "#000",
+          border: "1px solid var(--border-secondary)",
+          borderRadius: "var(--radius-lg)",
           overflow: "hidden",
           display: "flex",
           flexDirection: "column",
-          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.75)",
         }}
       >
         <div
           style={{
             padding: "10px 16px",
-            borderBottom: "1px solid #1e293b",
+            borderBottom: "1px solid var(--border-primary)",
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
-            background: "#0f172a",
+            background: "var(--bg-secondary)",
           }}
         >
-          <div>
-            <div className="mono" style={{ fontSize: 13, fontWeight: 700, color: "#38bdf8" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--text-accent)" }}>
               {camera.camera_code}
             </div>
-            <div style={{ fontSize: 12, color: "#94a3b8" }}>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
               {camera.name} · {camera.district || "Surveillance"}
             </div>
           </div>
           <button
             onClick={onClose}
             style={{
-              background: "none",
-              border: "none",
-              color: "#94a3b8",
-              fontSize: 20,
-              cursor: "pointer",
+              color: "var(--text-secondary)",
+              fontSize: 18,
+              padding: "0 4px",
               lineHeight: 1,
             }}
           >
-            ×
+            ✕
           </button>
         </div>
         <div style={{ aspectRatio: "16/9", position: "relative" }}>

@@ -1,82 +1,74 @@
 :root {
-  /* Command-room palette: low-glare dark base (long shifts, video walls),
-     desaturated slate surfaces, and functional severity colors that carry
-     real meaning rather than decoration. */
-  --bg-void: #0b0f14;
-  --bg-panel: #121822;
-  --bg-panel-raised: #182130;
+  --bg-primary: #0a0f1a;
+  --bg-secondary: #111827;
+  --bg-tertiary: #1a2332;
+  --bg-card: #151e2d;
   --bg-hover: #1e293b;
-  --border-hairline: #253044;
+  --bg-active: #0f2a3d;
+  --bg-input: #0d1520;
 
-  --text-primary: #e7ecf3;
-  --text-secondary: #8b98ab;
-  --text-tertiary: #5b6b82;
+  --border-primary: #1e2d40;
+  --border-secondary: #263548;
+  --border-active: #2563eb;
+  --border-subtle: rgba(255,255,255,0.06);
 
-  --accent-active: #3dd6c4; /* live/active status */
-  --accent-active-dim: #14403b;
+  --text-primary: #e2e8f0;
+  --text-secondary: #8494a7;
+  --text-muted: #4a5b6e;
+  --text-accent: #60a5fa;
 
-  --severity-critical: #ef4444;
-  --severity-critical-dim: #3a1414;
-  --severity-high: #f59e0b;
-  --severity-high-dim: #3a2b0f;
-  --severity-medium: #eab308;
-  --severity-medium-dim: #35300d;
-  --severity-low: #64748b;
-  --severity-low-dim: #1f2733;
+  --accent-blue: #2563eb;
+  --accent-blue-light: #3b82f6;
+  --accent-blue-dim: rgba(37,99,235,0.15);
+  --accent-green: #10b981;
+  --accent-green-dim: rgba(16,185,129,0.15);
+  --accent-red: #ef4444;
+  --accent-red-dim: rgba(239,68,68,0.15);
+  --accent-yellow: #f59e0b;
+  --accent-yellow-dim: rgba(245,158,11,0.15);
+  --accent-cyan: #06b6d4;
+
+  --sidebar-width: 200px;
+  --layout-panel-width: 240px;
+  --topbar-height: 52px;
 
   --font-ui: "Inter", -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", "Roboto Mono", ui-monospace, monospace;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
-html,
-body,
-#root {
-  height: 100%;
-  margin: 0;
-}
+html, body, #root { height: 100%; overflow: hidden; }
 
 body {
-  background: var(--bg-void);
+  background: var(--bg-primary);
   color: var(--text-primary);
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: 13px;
+  line-height: 1.4;
   -webkit-font-smoothing: antialiased;
 }
 
-button {
-  font-family: inherit;
-  cursor: pointer;
-}
+button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+input { font-family: inherit; }
+a { color: var(--text-accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
 
-input {
-  font-family: inherit;
-}
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
-:focus-visible {
-  outline: 2px solid var(--accent-active);
-  outline-offset: 1px;
-}
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #263548; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #374960; }
 
-.mono {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 
-/* Leaflet dark-theme tuning: default tile attribution/controls read as a
-   bright white rectangle against a dark UI otherwise. */
-.leaflet-control-attribution {
-  background: rgba(11, 15, 20, 0.75) !important;
-  color: var(--text-tertiary) !important;
-}
-.leaflet-control-attribution a {
-  color: var(--text-secondary) !important;
-}
-.leaflet-control-zoom a {
-  background: var(--bg-panel-raised) !important;
-  color: var(--text-primary) !important;
-  border-color: var(--border-hairline) !important;
-}
+.leaflet-control-attribution { background: rgba(10,15,26,0.8) !important; color: var(--text-muted) !important; }
+.leaflet-control-attribution a { color: var(--text-secondary) !important; }
+.leaflet-control-zoom a { background: var(--bg-secondary) !important; color: var(--text-primary) !important; border-color: var(--border-primary) !important; }

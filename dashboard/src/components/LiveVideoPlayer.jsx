@@ -1,10 +1,6 @@
-import React, { memo } from "react";
+import { memo } from "react";
 import CameraPlayer from "./CameraPlayer.jsx";
 
-/**
- * LiveVideoPlayer: Backward-compatible adapter delegating to CameraPlayer
- * which provides WebRTC (WHEP) streaming with automatic HLS fallback.
- */
 function LiveVideoPlayer({
   cameraCode,
   camera,
@@ -32,7 +28,6 @@ function LiveVideoPlayer({
       showDiagnostics={showDiagnostics}
       onStatusChange={onStatusChange}
       onExpand={onExpand}
-      lazy={lazy}
       {...rest}
     />
   );

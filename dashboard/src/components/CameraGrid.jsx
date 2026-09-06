@@ -1,80 +1,76 @@
-import React, { useState, useMemo, useEffect, useCallback, memo } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, memo } from "react";
 import CameraPlayer from "./CameraPlayer.jsx";
 import { normalizeCameraId } from "../utils/streamUrlBuilder.js";
 
-const GRID_PRESETS = [
-  { id: "wall30", label: "30-Wall (5×6)", cols: 5, max: 30 },
-  { id: "grid16", label: "4×4 (16)", cols: 4, max: 16 },
-  { id: "grid9", label: "3×3 (9)", cols: 3, max: 9 },
-  { id: "grid4", label: "2×2 (4)", cols: 2, max: 4 },
+const GRID_SIZES = [
+  { id: "1x1", cols: 1, rows: 1, label: "1×1" },
+  { id: "2x2", cols: 2, rows: 2, label: "2×2" },
+  { id: "3x3", cols: 3, rows: 3, label: "3×3" },
+  { id: "4x4", cols: 4, rows: 4, label: "4×4" },
+  { id: "5x5", cols: 5, rows: 5, label: "5×5" },
 ];
 
-function getResponsiveColumns() {
-  if (typeof window === "undefined") return 5;
+function getResponsiveGrid() {
+  if (typeof window === "undefined") return "3x3";
   const w = window.innerWidth;
-  if (w < 640) return 1;
-  if (w < 900) return 2;
-  if (w < 1200) return 3;
-  if (w < 1600) return 4;
-  return 5;
+  if (w < 900) return "2x2";
+  if (w < 1300) return "3x3";
+  return "4x4";
 }
 
-// Memoized individual camera tile to prevent re-renders of all tiles when one changes
 const CameraTile = memo(function CameraTile({
   camera,
   slotIndex,
-  isActiveSlot,
   streamGatewayBaseUrl,
   showDiagnostics,
-  onSlotClick,
-  onRemove,
   onExpand,
   onStatusChange,
+  tileSize,
 }) {
   if (!camera) {
     return (
       <div
-        onClick={() => onSlotClick(slotIndex)}
         style={{
-          position: "relative",
-          background: "#0a0e14",
-          border: isActiveSlot ? "2px solid #3b82f6" : "1px dashed var(--border-hairline, #1e2a3a)",
-          borderRadius: 6,
-          overflow: "hidden",
-          cursor: "pointer",
+          background: "var(--bg-card)",
+          border: "1px dashed var(--border-secondary)",
+          borderRadius: "var(--radius-md)",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          gap: 6,
-          color: isActiveSlot ? "#3b82f6" : "var(--text-tertiary, #64748b)",
-          minHeight: 110,
+          gap: 8,
+          color: "var(--text-muted)",
+          cursor: "pointer",
+          transition: "border-color 0.15s",
+          minHeight: 140,
         }}
+        onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--accent-blue)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border-secondary)"; }}
       >
-        <div style={{ fontSize: 18 }}>+</div>
-        <div style={{ fontSize: 10 }}>Slot {slotIndex + 1}</div>
+        <div style={{ fontSize: 28, opacity: 0.3 }}>+</div>
+        <div style={{ fontSize: 11, fontWeight: 500 }}>ASSIGN</div>
       </div>
     );
   }
 
   const camId = normalizeCameraId(camera.camera_code || camera.id);
   const displayName = camera.name || `Camera ${camId.toUpperCase()}`;
+  const channelNum = slotIndex + 1;
 
   return (
     <div
-      onClick={() => onSlotClick(slotIndex)}
       style={{
         position: "relative",
-        background: "#070b10",
-        border: isActiveSlot ? "2px solid #3b82f6" : "1px solid var(--border-hairline, #1a2434)",
-        borderRadius: 5,
+        background: "#000",
+        borderRadius: "var(--radius-md)",
         overflow: "hidden",
+        border: "1px solid var(--border-primary)",
         display: "flex",
         flexDirection: "column",
-        minHeight: 110,
+        minHeight: 140,
       }}
     >
-      {/* Video stream container */}
+      {/* Video */}
       <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
         <CameraPlayer
           camera={camera}
@@ -86,63 +82,53 @@ const CameraTile = memo(function CameraTile({
         />
       </div>
 
-      {/* Sleek bottom camera label bar */}
+      {/* Bottom bar */}
       <div
         style={{
-          padding: "3px 8px",
-          background: "rgba(10, 14, 20, 0.92)",
-          borderTop: "1px solid rgba(255, 255, 255, 0.05)",
+          padding: "4px 8px",
+          background: "rgba(10,15,26,0.92)",
+          borderTop: "1px solid var(--border-subtle)",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
           zIndex: 3,
         }}
       >
-        <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, overflow: "hidden" }}>
           <span
-            className="mono"
-            style={{ fontSize: 10, fontWeight: 700, color: "#93c5fd", marginRight: 6 }}
-          >
-            {camera.camera_code || camId.toUpperCase()}
-          </span>
-          <span style={{ fontSize: 10, color: "#94a3b8" }}>{displayName}</span>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 4 }}>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onExpand(camera);
-            }}
-            title="Focus / Expand Camera"
             style={{
-              background: "none",
-              border: "none",
-              color: "#94a3b8",
-              cursor: "pointer",
               fontSize: 10,
-              padding: "0 2px",
+              fontWeight: 700,
+              color: "var(--text-accent)",
+              fontFamily: "var(--font-mono)",
             }}
           >
-            ⛶
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove(slotIndex);
-            }}
-            title="Clear slot"
+            CH{String(channelNum).padStart(2, "0")}
+          </span>
+          <span
             style={{
-              background: "none",
-              border: "none",
-              color: "#ef4444",
-              cursor: "pointer",
-              fontSize: 12,
-              padding: "0 2px",
+              fontSize: 10,
+              color: "var(--text-secondary)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {displayName}
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); onExpand?.(camera); }}
+            title="Expand"
+            style={{
+              fontSize: 11,
+              color: "var(--text-muted)",
+              padding: "0 3px",
               lineHeight: 1,
             }}
           >
-            ×
+            ⛶
           </button>
         </div>
       </div>
@@ -151,19 +137,28 @@ const CameraTile = memo(function CameraTile({
 });
 
 export default function CameraGrid({ cameras = [], streamGatewayBaseUrl = "/hls" }) {
-  const [selectedPreset, setSelectedPreset] = useState(GRID_PRESETS[0]);
-  const [responsiveCols, setResponsiveCols] = useState(getResponsiveColumns);
+  const [selectedGrid, setSelectedGrid] = useState(getResponsiveGrid);
   const [slots, setSlots] = useState(() => {
     const active = (cameras || []).filter((c) => c && c.status === "active");
-    const initial = Array(30).fill(null);
-    active.slice(0, 30).forEach((cam, i) => { initial[i] = cam; });
+    const count = GRID_SIZES.find((g) => g.id === "3x3")?.cols ** 2 || 9;
+    const initial = Array(count).fill(null);
+    active.slice(0, count).forEach((cam, i) => { initial[i] = cam; });
     return initial;
   });
-
-  const [activeSlot, setActiveSlot] = useState(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [focusedCamera, setFocusedCamera] = useState(null);
   const [cameraStatuses, setCameraStatuses] = useState({});
+  const [layoutName, setLayoutName] = useState("Main Display");
+  const [editingName, setEditingName] = useState(false);
+
+  const gridConfig = GRID_SIZES.find((g) => g.id === selectedGrid) || GRID_SIZES[2];
+  const totalSlots = gridConfig.cols * gridConfig.rows;
+
+  useEffect(() => {
+    const onResize = () => setSelectedGrid(getResponsiveGrid());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const activeCameras = useMemo(
     () => (cameras || []).filter((c) => c && c.status === "active"),
@@ -171,20 +166,22 @@ export default function CameraGrid({ cameras = [], streamGatewayBaseUrl = "/hls"
   );
 
   useEffect(() => {
-    const onResize = () => setResponsiveCols(getResponsiveColumns());
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
+    setSlots((prev) => {
+      if (prev.length === totalSlots) return prev;
+      const next = Array(totalSlots).fill(null);
+      for (let i = 0; i < Math.min(prev.length, totalSlots); i++) next[i] = prev[i];
+      return next;
+    });
+  }, [totalSlots]);
 
   useEffect(() => {
     if (activeCameras.length > 0 && slots.every((s) => s === null)) {
-      const nextSlots = Array(selectedPreset.max).fill(null);
-      activeCameras.slice(0, selectedPreset.max).forEach((cam, i) => { nextSlots[i] = cam; });
-      setSlots(nextSlots);
+      const next = Array(totalSlots).fill(null);
+      activeCameras.slice(0, totalSlots).forEach((cam, i) => { next[i] = cam; });
+      setSlots(next);
     }
-  }, [activeCameras, selectedPreset.max]);
+  }, [activeCameras, totalSlots]);
 
-  // Handle status update from individual players
   const handleStatusChange = useCallback((camId, status) => {
     setCameraStatuses((prev) => {
       if (prev[camId] === status) return prev;
@@ -192,308 +189,211 @@ export default function CameraGrid({ cameras = [], streamGatewayBaseUrl = "/hls"
     });
   }, []);
 
-  // Compute live summary statistics
   const summaryStats = useMemo(() => {
-    const displayed = slots.slice(0, selectedPreset.max);
-    let totalAssigned = 0;
-    let live = 0;
-    let reconnecting = 0;
-    let loading = 0;
-    let offline = 0;
-
-    displayed.forEach((cam) => {
+    let live = 0, reconnecting = 0, loading = 0, offline = 0;
+    slots.forEach((cam) => {
       if (!cam) return;
-      totalAssigned += 1;
       const id = normalizeCameraId(cam.camera_code || cam.id);
       const st = cameraStatuses[id] || "loading";
-      if (st === "live") live += 1;
-      else if (st === "reconnecting") reconnecting += 1;
-      else if (st === "loading") loading += 1;
-      else offline += 1;
+      if (st === "live") live++;
+      else if (st === "reconnecting") reconnecting++;
+      else if (st === "loading") loading++;
+      else offline++;
     });
-
-    return { total: totalAssigned, live, reconnecting, loading, offline };
-  }, [slots, selectedPreset.max, cameraStatuses]);
-
-  const handleSlotClick = useCallback((slotIdx) => {
-    setActiveSlot((cur) => (cur === slotIdx ? null : slotIdx));
-  }, []);
-
-  const handleAssignCamera = useCallback(
-    (cam) => {
-      if (activeSlot === null) return;
-      setSlots((prev) => {
-        const next = [...prev];
-        next[activeSlot] = cam;
-        return next;
-      });
-      setActiveSlot(null);
-    },
-    [activeSlot]
-  );
-
-  const handleRemoveSlot = useCallback((slotIdx) => {
-    setSlots((prev) => {
-      const next = [...prev];
-      next[slotIdx] = null;
-      return next;
-    });
-    setActiveSlot((cur) => (cur === slotIdx ? null : cur));
-  }, []);
-
-  const handlePresetChange = (preset) => {
-    setSelectedPreset(preset);
-    setActiveSlot(null);
-    setSlots((prev) => {
-      const next = Array(preset.max).fill(null);
-      activeCameras.slice(0, preset.max).forEach((cam, i) => {
-        next[i] = prev[i] || cam;
-      });
-      return next;
-    });
-  };
+    return { live, reconnecting, loading, offline, total: slots.filter(Boolean).length };
+  }, [slots, cameraStatuses]);
 
   const handleFillAll = () => {
-    const newSlots = Array(selectedPreset.max).fill(null);
-    activeCameras.slice(0, selectedPreset.max).forEach((cam, i) => {
-      newSlots[i] = cam;
-    });
-    setSlots(newSlots);
-    setActiveSlot(null);
+    const next = Array(totalSlots).fill(null);
+    activeCameras.slice(0, totalSlots).forEach((cam, i) => { next[i] = cam; });
+    setSlots(next);
   };
 
-  const handleClearAll = () => {
-    setSlots(Array(selectedPreset.max).fill(null));
-    setActiveSlot(null);
+  const handleClearAll = () => setSlots(Array(totalSlots).fill(null));
+
+  const handleAssignSlot = (slotIdx) => {
+    const unassigned = activeCameras.find(
+      (cam) => !slots.some((s) => s && (s.id === cam.id || s.camera_code === cam.camera_code))
+    );
+    if (unassigned) {
+      setSlots((prev) => { const next = [...prev]; next[slotIdx] = unassigned; return next; });
+    }
   };
 
-  const effectiveCols = Math.min(responsiveCols, selectedPreset.cols);
-  const displayedSlots = slots.slice(0, selectedPreset.max);
+  const displayedSlots = slots.slice(0, totalSlots);
+  const liveCount = summaryStats.live;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#05080c" }}>
-      {/* ── Grid Control Header ── */}
-      <div
-        style={{
-          padding: "8px 16px",
-          borderBottom: "1px solid var(--border-hairline, #1e2a3a)",
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          flexWrap: "wrap",
-          background: "var(--bg-panel, #0f172a)",
-        }}
-      >
-        <span style={{ fontWeight: 700, fontSize: 13, color: "#f8fafc" }}>
-          SENTINEL LIVE WALL
-        </span>
-
-        {/* Layout Presets */}
-        <div style={{ display: "flex", gap: 3 }}>
-          {GRID_PRESETS.map((preset) => (
-            <button
-              key={preset.id}
-              onClick={() => handlePresetChange(preset)}
-              style={{
-                fontSize: 11,
-                padding: "3px 9px",
-                background: selectedPreset.id === preset.id ? "#1e3a8a" : "var(--bg-panel-raised, #1e293b)",
-                border: `1px solid ${selectedPreset.id === preset.id ? "#3b82f6" : "#334155"}`,
-                borderRadius: 4,
-                color: selectedPreset.id === preset.id ? "#bfdbfe" : "#94a3b8",
-                cursor: "pointer",
-                fontWeight: selectedPreset.id === preset.id ? 600 : 400,
-              }}
-            >
-              {preset.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Live Grid Status Summary Badges */}
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+      {/* Top toolbar */}
         <div
           style={{
+            padding: "8px 16px",
+            borderBottom: "1px solid var(--border-primary)",
             display: "flex",
             alignItems: "center",
-            gap: 8,
-            padding: "2px 10px",
-            background: "rgba(15, 23, 42, 0.7)",
-            border: "1px solid #334155",
-            borderRadius: 4,
-            fontSize: 11,
+            gap: 12,
+            background: "var(--bg-secondary)",
+            flexShrink: 0,
           }}
         >
-          <span style={{ color: "#e2e8f0", fontWeight: 600 }}>
-            {summaryStats.total} / {selectedPreset.max} Active
-          </span>
-          <span style={{ color: "#4ade80", fontWeight: 600 }}>
-            ● {summaryStats.live} Live
-          </span>
-          {summaryStats.reconnecting > 0 && (
-            <span style={{ color: "#facc15", fontWeight: 600 }}>
-              ↺ {summaryStats.reconnecting} Reconnecting
-            </span>
-          )}
-          {summaryStats.loading > 0 && (
-            <span style={{ color: "#38bdf8" }}>
-              ⏳ {summaryStats.loading} Connecting
-            </span>
-          )}
-        </div>
+          {/* Layout name */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {editingName ? (
+              <input
+                autoFocus
+                value={layoutName}
+                onChange={(e) => setLayoutName(e.target.value)}
+                onBlur={() => setEditingName(false)}
+                onKeyDown={(e) => e.key === "Enter" && setEditingName(false)}
+                style={{
+                  fontSize: 14,
+                  fontWeight: 600,
+                  background: "var(--bg-input)",
+                  border: "1px solid var(--accent-blue)",
+                  borderRadius: "var(--radius-sm)",
+                  color: "var(--text-primary)",
+                  padding: "2px 6px",
+                  outline: "none",
+                  width: 160,
+                }}
+              />
+            ) : (
+              <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
+                {layoutName}
+              </span>
+            )}
+            <button
+              onClick={() => setEditingName(true)}
+              style={{ fontSize: 11, color: "var(--text-muted)", padding: "2px 4px" }}
+            >
+              ✏
+            </button>
+          </div>
 
-        {/* Action Buttons */}
-        <div style={{ display: "flex", gap: 6, marginLeft: "auto", alignItems: "center" }}>
+          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+            {gridConfig.label} · {summaryStats.total} / {totalSlots} cameras
+          </span>
+
+          {/* Grid size buttons */}
+          <div style={{ display: "flex", gap: 2, marginLeft: "auto" }}>
+            {GRID_SIZES.map((g) => (
+              <button
+                key={g.id}
+                onClick={() => setSelectedGrid(g.id)}
+                style={{
+                  fontSize: 11,
+                  padding: "4px 10px",
+                  borderRadius: "var(--radius-sm)",
+                  fontWeight: selectedGrid === g.id ? 600 : 400,
+                  background: selectedGrid === g.id ? "var(--accent-blue)" : "transparent",
+                  color: selectedGrid === g.id ? "#fff" : "var(--text-secondary)",
+                  border: selectedGrid === g.id ? "1px solid var(--accent-blue-light)" : "1px solid var(--border-secondary)",
+                }}
+              >
+                {g.label}
+              </button>
+            ))}
+          </div>
+
           <button
             onClick={() => setShowDiagnostics((d) => !d)}
             style={{
               fontSize: 10,
-              padding: "4px 8px",
-              background: showDiagnostics ? "#0e7490" : "transparent",
-              border: `1px solid ${showDiagnostics ? "#06b6d4" : "#475569"}`,
-              borderRadius: 4,
-              color: showDiagnostics ? "#cffafe" : "#94a3b8",
-              cursor: "pointer",
+              padding: "4px 10px",
+              borderRadius: "var(--radius-sm)",
+              background: showDiagnostics ? "var(--accent-cyan)" : "transparent",
+              border: `1px solid ${showDiagnostics ? "var(--accent-cyan)" : "var(--border-secondary)"}`,
+              color: showDiagnostics ? "#fff" : "var(--text-secondary)",
               fontWeight: 500,
             }}
           >
-            {showDiagnostics ? "✓ Diagnostics On" : "⚡ Diagnostics"}
-          </button>
-
-          <button
-            onClick={handleFillAll}
-            style={{
-              fontSize: 11,
-              padding: "4px 12px",
-              background: "#0284c7",
-              border: "1px solid #38bdf8",
-              borderRadius: 4,
-              color: "#fff",
-              cursor: "pointer",
-              fontWeight: 600,
-            }}
-          >
-            ⚡ Auto-Fill All ({activeCameras.length})
-          </button>
-
-          <button
-            onClick={handleClearAll}
-            style={{
-              fontSize: 11,
-              padding: "4px 10px",
-              background: "transparent",
-              border: "1px solid #475569",
-              borderRadius: 4,
-              color: "#94a3b8",
-              cursor: "pointer",
-            }}
-          >
-            Clear
+            SURVEILLANCE
           </button>
         </div>
-      </div>
 
-      {/* ── Main Viewport ── */}
-      <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
-        {/* Adaptive Video Wall Grid */}
+        {/* Camera Grid */}
         <div
           style={{
             flex: 1,
             display: "grid",
-            gridTemplateColumns: `repeat(${effectiveCols}, minmax(0, 1fr))`,
-            gridAutoRows: selectedPreset.max >= 25 ? "minmax(130px, 1fr)" : "minmax(180px, 1fr)",
+            gridTemplateColumns: `repeat(${gridConfig.cols}, 1fr)`,
+            gridTemplateRows: `repeat(${gridConfig.rows}, 1fr)`,
             gap: 4,
-            padding: 5,
-            background: "#05080c",
-            overflowY: "auto",
+            padding: 4,
+            background: "var(--bg-primary)",
+            overflow: "hidden",
           }}
         >
           {displayedSlots.map((cam, idx) => (
             <CameraTile
-              key={cam ? cam.id || cam.camera_code : `slot-${idx}`}
+              key={cam ? cam.id || cam.camera_code : `empty-${idx}`}
               camera={cam}
               slotIndex={idx}
-              isActiveSlot={activeSlot === idx}
               streamGatewayBaseUrl={streamGatewayBaseUrl}
               showDiagnostics={showDiagnostics}
-              onSlotClick={handleSlotClick}
-              onRemove={handleRemoveSlot}
-              onExpand={(c) => setFocusedCamera(c)}
+              onExpand={setFocusedCamera}
               onStatusChange={handleStatusChange}
             />
           ))}
         </div>
 
-        {/* Active Camera Sidebar for manual assignment */}
+        {/* Bottom status bar */}
         <div
           style={{
-            width: 210,
-            flexShrink: 0,
-            borderLeft: "1px solid #1e293b",
-            background: "#0b121e",
+            padding: "4px 16px",
+            borderTop: "1px solid var(--border-primary)",
+            background: "var(--bg-secondary)",
             display: "flex",
-            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "space-between",
+            fontSize: 11,
+            color: "var(--text-muted)",
+            flexShrink: 0,
           }}
         >
-          <div
-            style={{
-              padding: "8px 12px",
-              fontSize: 10,
-              fontWeight: 700,
-              color: "#64748b",
-              textTransform: "uppercase",
-              letterSpacing: "0.06em",
-              borderBottom: "1px solid #1e293b",
-            }}
-          >
-            Camera Pool ({activeCameras.length})
-          </div>
-
-          <div style={{ flex: 1, overflowY: "auto" }}>
-            {activeCameras.map((cam) => {
-              const isAssigned = slots.some((s) => s && (s.id === cam.id || s.camera_code === cam.camera_code));
-              return (
-                <div
-                  key={cam.id}
-                  onClick={() => activeSlot !== null && !isAssigned && handleAssignCamera(cam)}
-                  style={{
-                    padding: "7px 10px",
-                    borderBottom: "1px solid rgba(255, 255, 255, 0.04)",
-                    cursor: activeSlot !== null && !isAssigned ? "pointer" : "default",
-                    opacity: isAssigned ? 0.45 : 1,
-                    background: "transparent",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (activeSlot !== null && !isAssigned) e.currentTarget.style.background = "#1e293b";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "transparent";
-                  }}
-                >
-                  <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: "#e2e8f0" }}>
-                    {cam.camera_code}
-                  </div>
-                  <div style={{ fontSize: 10, color: "#64748b", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {cam.name}
-                  </div>
-                  {isAssigned && (
-                    <div style={{ fontSize: 9, color: "#22c55e", marginTop: 1 }}>✓ On wall</div>
-                  )}
-                </div>
-              );
-            })}
+          <span>
+            Page 1 of 1 · {summaryStats.live} live, {summaryStats.reconnecting > 0 ? `${summaryStats.reconnecting} reconnecting, ` : ""}{summaryStats.loading > 0 ? `${summaryStats.loading} connecting, ` : ""}{totalSlots - summaryStats.total} empty
+          </span>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button
+              onClick={handleFillAll}
+              style={{
+                fontSize: 10,
+                padding: "3px 8px",
+                background: "var(--accent-blue-dim)",
+                border: "1px solid var(--accent-blue)",
+                borderRadius: "var(--radius-sm)",
+                color: "var(--text-accent)",
+                fontWeight: 500,
+              }}
+            >
+              Auto-Fill ({activeCameras.length})
+            </button>
+            <button
+              onClick={handleClearAll}
+              style={{
+                fontSize: 10,
+                padding: "3px 8px",
+                background: "transparent",
+                border: "1px solid var(--border-secondary)",
+                borderRadius: "var(--radius-sm)",
+                color: "var(--text-secondary)",
+              }}
+            >
+              Clear
+            </button>
           </div>
         </div>
-      </div>
 
-      {/* ── High Quality Focused / Fullscreen Overlay ── */}
+      {/* ── Fullscreen Focused Camera ── */}
       {focusedCamera && (
         <div
           onClick={() => setFocusedCamera(null)}
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(0, 0, 0, 0.85)",
-            backdropFilter: "blur(6px)",
+            background: "rgba(0,0,0,0.9)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -505,44 +405,37 @@ export default function CameraGrid({ cameras = [], streamGatewayBaseUrl = "/hls"
             onClick={(e) => e.stopPropagation()}
             style={{
               width: "100%",
-              maxWidth: 960,
+              maxWidth: 1100,
               aspectRatio: "16/9",
-              background: "#080c12",
-              border: "1px solid #334155",
-              borderRadius: 8,
+              background: "#000",
+              borderRadius: "var(--radius-lg)",
               overflow: "hidden",
+              border: "1px solid var(--border-secondary)",
               display: "flex",
               flexDirection: "column",
-              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.75)",
             }}
           >
             <div
               style={{
                 padding: "8px 14px",
-                background: "#0f172a",
-                borderBottom: "1px solid #1e293b",
+                background: "var(--bg-secondary)",
+                borderBottom: "1px solid var(--border-primary)",
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
               }}
             >
-              <div>
-                <span className="mono" style={{ fontWeight: 700, color: "#38bdf8", marginRight: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span className="mono" style={{ fontWeight: 700, color: "var(--text-accent)", fontSize: 13 }}>
                   {focusedCamera.camera_code}
                 </span>
-                <span style={{ fontSize: 12, color: "#94a3b8" }}>
-                  {focusedCamera.name} · High-Quality Live Stream
+                <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                  {focusedCamera.name}
                 </span>
               </div>
               <button
                 onClick={() => setFocusedCamera(null)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "#cbd5e1",
-                  fontSize: 18,
-                  cursor: "pointer",
-                }}
+                style={{ color: "var(--text-secondary)", fontSize: 18, padding: "0 4px" }}
               >
                 ✕
               </button>

@@ -50,7 +50,7 @@ export default function DetectionHistory({ onShowRoute }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", padding: "0 0 20px 0" }}>
       {/* Header */}
-      <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border-hairline)" }}>
+      <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border-primary)" }}>
         <div style={{ fontWeight: 700, fontSize: 15 }}>Vehicle Detection History</div>
         <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
           Search detected plates · view camera sequence · load route on GIS
@@ -58,13 +58,13 @@ export default function DetectionHistory({ onShowRoute }) {
       </div>
 
       {/* Search */}
-      <form onSubmit={handleSearch} style={{ padding: "12px 20px", display: "flex", gap: 8, borderBottom: "1px solid var(--border-hairline)" }}>
+      <form onSubmit={handleSearch} style={{ padding: "12px 20px", display: "flex", gap: 8, borderBottom: "1px solid var(--border-primary)" }}>
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Enter plate number (e.g. GJ01AB1234)…"
           style={{
-            flex: 1, background: "var(--bg-panel)", border: "1px solid var(--border-hairline)",
+            flex: 1, background: "var(--bg-secondary)", border: "1px solid var(--border-primary)",
             borderRadius: 4, padding: "7px 12px", fontSize: 13, color: "var(--text-primary)",
             fontFamily: "var(--font-mono)",
           }}
@@ -92,7 +92,7 @@ export default function DetectionHistory({ onShowRoute }) {
       {/* Vehicle search results */}
       {results.length > 0 && (
         <div style={{ padding: "0 20px" }}>
-          <div style={{ fontSize: 11, color: "var(--text-tertiary)", padding: "10px 0 6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", padding: "10px 0 6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
             {results.length} vehicle{results.length !== 1 ? "s" : ""} found
           </div>
           {results.map((v) => (
@@ -100,8 +100,8 @@ export default function DetectionHistory({ onShowRoute }) {
               key={v.registration_number}
               style={{
                 padding: "10px 12px", marginBottom: 8,
-                background: "var(--bg-void)", borderRadius: 6,
-                border: "1px solid var(--border-hairline)",
+                background: "var(--bg-primary)", borderRadius: 6,
+                border: "1px solid var(--border-primary)",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
               }}
             >
@@ -110,7 +110,7 @@ export default function DetectionHistory({ onShowRoute }) {
                 <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
                   {[v.vehicle_type, v.color].filter(Boolean).join(" · ") || "Unknown type/color"}
                 </div>
-                <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 2 }}>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
                   {v.first_seen_at ? `First: ${new Date(v.first_seen_at).toLocaleString()}` : ""}
                   {v.last_seen_at ? ` · Last: ${new Date(v.last_seen_at).toLocaleString()}` : ""}
                 </div>
@@ -120,7 +120,7 @@ export default function DetectionHistory({ onShowRoute }) {
                 disabled={loadingRoute === v.registration_number}
                 style={{
                   fontSize: 12, padding: "5px 12px",
-                  background: loadingRoute === v.registration_number ? "var(--bg-void)" : "#1a3a5c",
+                  background: loadingRoute === v.registration_number ? "var(--bg-primary)" : "#1a3a5c",
                   border: "1px solid #2563eb", borderRadius: 4, color: "#93c5fd", cursor: "pointer",
                 }}
               >
@@ -134,7 +134,7 @@ export default function DetectionHistory({ onShowRoute }) {
       {/* Route detail */}
       {routeData && (
         <div style={{ flex: 1, overflowY: "auto", padding: "0 20px" }}>
-          <div style={{ fontSize: 11, color: "var(--text-tertiary)", padding: "12px 0 6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", padding: "12px 0 6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
             Route — {routeData.total_detections} detection{routeData.total_detections !== 1 ? "s" : ""} · {routeData.registration_number}
           </div>
           <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 10 }}>
@@ -145,8 +145,8 @@ export default function DetectionHistory({ onShowRoute }) {
               key={stop.detection_id}
               style={{
                 padding: "10px 12px", marginBottom: 6,
-                background: "var(--bg-void)", borderRadius: 6,
-                border: "1px solid var(--border-hairline)",
+                background: "var(--bg-primary)", borderRadius: 6,
+                border: "1px solid var(--border-primary)",
                 display: "flex", gap: 12, alignItems: "flex-start",
               }}
             >
@@ -162,7 +162,7 @@ export default function DetectionHistory({ onShowRoute }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="mono" style={{ fontSize: 12, fontWeight: 600 }}>{stop.camera_code}</div>
                 <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>{stop.camera_name} · {stop.district || "—"}</div>
-                <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 2 }}>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
                   {new Date(stop.timestamp).toLocaleString()}
                   {stop.ocr_confidence != null ? ` · OCR: ${(stop.ocr_confidence * 100).toFixed(0)}%` : ""}
                 </div>
@@ -174,7 +174,7 @@ export default function DetectionHistory({ onShowRoute }) {
 
       {!routeData && results.length === 0 && recent.length > 0 && (
         <div style={{ flex: 1, overflowY: "auto", padding: "0 20px 20px" }}>
-          <div style={{ fontSize: 11, color: "var(--text-tertiary)", padding: "12px 0 6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", padding: "12px 0 6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
             Recent detections
           </div>
           {recent.map((d) => (
@@ -182,8 +182,8 @@ export default function DetectionHistory({ onShowRoute }) {
               key={d.id}
               style={{
                 padding: "10px 12px", marginBottom: 6,
-                background: "var(--bg-void)", borderRadius: 6,
-                border: "1px solid var(--border-hairline)",
+                background: "var(--bg-primary)", borderRadius: 6,
+                border: "1px solid var(--border-primary)",
                 display: "flex", justifyContent: "space-between", gap: 12, cursor: "pointer",
               }}
               onClick={() => d.normalized_value && handleLoadRoute(d.normalized_value)}
@@ -194,7 +194,7 @@ export default function DetectionHistory({ onShowRoute }) {
                   {d.camera_code} · {d.camera_name} · {d.vehicle_type || "vehicle"}
                 </div>
               </div>
-              <div style={{ fontSize: 11, color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap" }}>
                 {d.detected_at ? new Date(d.detected_at).toLocaleString() : ""}
               </div>
             </div>
@@ -203,7 +203,7 @@ export default function DetectionHistory({ onShowRoute }) {
       )}
 
       {!routeData && results.length === 0 && recent.length === 0 && !loadingSearch && !error && (
-        <div style={{ padding: 30, color: "var(--text-tertiary)", fontSize: 13, textAlign: "center" }}>
+        <div style={{ padding: 30, color: "var(--text-muted)", fontSize: 13, textAlign: "center" }}>
           Search for a vehicle plate to see detection history and reconstruct its route across cameras.
         </div>
       )}

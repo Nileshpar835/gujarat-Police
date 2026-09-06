@@ -16,8 +16,8 @@ export default function VehicleSearch({ onSearch, loading, error }) {
         placeholder="Enter registration number (e.g. GJ01AB1234)"
         className="mono"
         style={{
-          background: "var(--bg-panel-raised)",
-          border: "1px solid var(--border-hairline)",
+          background: "var(--bg-tertiary)",
+          border: "1px solid var(--border-primary)",
           borderRadius: 6,
           padding: "8px 12px",
           color: "var(--text-primary)",
@@ -29,9 +29,9 @@ export default function VehicleSearch({ onSearch, loading, error }) {
         type="submit"
         disabled={loading}
         style={{
-          background: "var(--accent-active-dim)",
-          color: "var(--accent-active)",
-          border: "1px solid var(--accent-active)",
+          background: "var(--accent-green-dim)",
+          color: "var(--accent-green)",
+          border: "1px solid var(--accent-green)",
           borderRadius: 6,
           padding: "8px 14px",
           fontSize: 13,
@@ -41,7 +41,7 @@ export default function VehicleSearch({ onSearch, loading, error }) {
         {loading ? "Tracing…" : "Trace vehicle"}
       </button>
       {error && (
-        <span style={{ fontSize: 12, color: "var(--severity-critical)" }}>{error}</span>
+        <span style={{ fontSize: 12, color: "var(--accent-red)" }}>{error}</span>
       )}
     </form>
   );

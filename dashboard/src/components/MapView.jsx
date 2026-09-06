@@ -55,7 +55,7 @@ export default function MapView({ cameras = [], activeRoute, onCameraClick }) {
     <MapContainer
       center={GUJARAT_CENTER}
       zoom={7}
-      style={{ height: "100%", width: "100%", background: "var(--bg-void)" }}
+      style={{ height: "100%", width: "100%", background: "var(--bg-primary)" }}
       zoomControl={true}
     >
       <TileLayer

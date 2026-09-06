@@ -1,5 +1,6 @@
 ﻿import { useState } from "react";
 import { login } from "../api.js";
+import GujaratPoliceLogo from "./GujaratPoliceLogo.jsx";
 
 export default function LoginScreen({ onLoginSuccess }) {
   const [username, setUsername] = useState("admin");
@@ -37,38 +38,42 @@ export default function LoginScreen({ onLoginSuccess }) {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "var(--bg-void)",
+        background: "var(--bg-primary)",
       }}
     >
       <form
         onSubmit={submit}
         style={{
-          width: 360,
-          background: "var(--bg-panel)",
-          border: "1px solid var(--border-hairline)",
-          borderRadius: 8,
-          padding: 28,
-          boxShadow: "0 12px 32px rgba(0,0,0,0.5)",
+          width: 400,
+          background: "var(--bg-secondary)",
+          border: "1px solid var(--border-primary)",
+          borderRadius: "var(--radius-lg)",
+          padding: 36,
+          boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent-active)" }} />
-          <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)" }}>
-            Gujarat CCTV Command Dashboard
-          </span>
-        </div>
-        <div style={{ marginBottom: 16, fontSize: 12, color: "var(--text-secondary)" }}>
-          Gujarat Police · State CCTV Network
+        {/* Logo + Department */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 24 }}>
+          <GujaratPoliceLogo size={72} style={{ marginBottom: 12 }} />
+          <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", textAlign: "center" }}>
+            Government of Gujarat
+          </div>
+          <div style={{ fontSize: 13, color: "var(--text-accent)", fontWeight: 500, textAlign: "center" }}>
+            Home Department
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4, textAlign: "center" }}>
+            Gujarat CCTV Surveillance Platform
+          </div>
         </div>
 
-        {/* Demo credentials hint badge */}
+        {/* Demo credentials */}
         <div
           style={{
-            marginBottom: 16,
+            marginBottom: 20,
             padding: "8px 12px",
-            background: "rgba(61, 214, 196, 0.08)",
-            border: "1px solid rgba(61, 214, 196, 0.2)",
-            borderRadius: 6,
+            background: "var(--accent-blue-dim)",
+            border: "1px solid rgba(37,99,235,0.3)",
+            borderRadius: "var(--radius-sm)",
             fontSize: 11,
             color: "var(--text-secondary)",
             display: "flex",
@@ -76,25 +81,20 @@ export default function LoginScreen({ onLoginSuccess }) {
             alignItems: "center",
           }}
         >
-          <span>Demo User: <strong style={{ color: "var(--accent-active)" }}>admin</strong> / <strong style={{ color: "var(--accent-active)" }}>admin123</strong></span>
+          <span>Demo: <strong style={{ color: "var(--text-accent)" }}>admin</strong> / <strong style={{ color: "var(--text-accent)" }}>admin123</strong></span>
           <button
             type="button"
             onClick={() => { setUsername("admin"); setPassword("admin123"); }}
             style={{
-              background: "none",
-              border: "none",
-              color: "var(--accent-active)",
-              fontSize: 11,
-              cursor: "pointer",
-              textDecoration: "underline",
-              padding: 0,
+              background: "none", border: "none", color: "var(--text-accent)",
+              fontSize: 11, cursor: "pointer", textDecoration: "underline", padding: 0,
             }}
           >
             Reset
           </button>
         </div>
 
-        <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 4 }}>
+        <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 5, fontWeight: 500 }}>
           Username
         </label>
         <input
@@ -102,18 +102,18 @@ export default function LoginScreen({ onLoginSuccess }) {
           onChange={(e) => setUsername(e.target.value)}
           autoFocus
           style={{
-            width: "100%",
-            marginBottom: 14,
-            background: "var(--bg-panel-raised)",
-            border: "1px solid var(--border-hairline)",
-            borderRadius: 6,
-            padding: "8px 10px",
+            width: "100%", marginBottom: 16,
+            background: "var(--bg-input)",
+            border: "1px solid var(--border-primary)",
+            borderRadius: "var(--radius-sm)",
+            padding: "9px 12px",
             color: "var(--text-primary)",
             fontSize: 13,
+            outline: "none",
           }}
         />
 
-        <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 4 }}>
+        <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 5, fontWeight: 500 }}>
           Password
         </label>
         <input
@@ -121,19 +121,19 @@ export default function LoginScreen({ onLoginSuccess }) {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           style={{
-            width: "100%",
-            marginBottom: 18,
-            background: "var(--bg-panel-raised)",
-            border: "1px solid var(--border-hairline)",
-            borderRadius: 6,
-            padding: "8px 10px",
+            width: "100%", marginBottom: 20,
+            background: "var(--bg-input)",
+            border: "1px solid var(--border-primary)",
+            borderRadius: "var(--radius-sm)",
+            padding: "9px 12px",
             color: "var(--text-primary)",
             fontSize: 13,
+            outline: "none",
           }}
         />
 
         {error && (
-          <div style={{ marginBottom: 14, fontSize: 12, color: "var(--severity-critical)" }}>{error}</div>
+          <div style={{ marginBottom: 14, fontSize: 12, color: "var(--accent-red)" }}>{error}</div>
         )}
 
         <button
@@ -141,17 +141,19 @@ export default function LoginScreen({ onLoginSuccess }) {
           disabled={loading}
           style={{
             width: "100%",
-            background: "var(--accent-active-dim)",
-            color: "var(--accent-active)",
-            border: "1px solid var(--accent-active)",
-            borderRadius: 6,
+            background: loading ? "var(--bg-tertiary)" : "var(--accent-blue)",
+            color: "#fff",
+            border: "none",
+            borderRadius: "var(--radius-sm)",
             padding: "10px 0",
             fontSize: 13,
             fontWeight: 600,
-            cursor: "pointer",
+            cursor: loading ? "default" : "pointer",
+            opacity: loading ? 0.7 : 1,
+            transition: "background 0.15s",
           }}
         >
-          {loading ? "Signing in…" : "⚡ Sign in to Command Centre"}
+          {loading ? "Signing in..." : "Sign in"}
         </button>
       </form>
     </div>

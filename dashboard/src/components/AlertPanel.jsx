@@ -1,10 +1,10 @@
 import { useState } from "react";
 
 const SEVERITY_STYLE = {
-  critical: { fg: "var(--severity-critical)", bg: "var(--severity-critical-dim)" },
-  high: { fg: "var(--severity-high)", bg: "var(--severity-high-dim)" },
-  medium: { fg: "var(--severity-medium)", bg: "var(--severity-medium-dim)" },
-  low: { fg: "var(--severity-low)", bg: "var(--severity-low-dim)" },
+  critical: { fg: "var(--accent-red)", bg: "var(--accent-red-dim)" },
+  high: { fg: "var(--accent-yellow)", bg: "var(--accent-yellow-dim)" },
+  medium: { fg: "var(--accent-yellow)", bg: "var(--accent-yellow-dim)" },
+  low: { fg: "var(--text-muted)", bg: "var(--bg-tertiary)" },
 };
 
 const EVENT_TYPE_LABEL = {
@@ -34,7 +34,7 @@ function AlertCard({ alert, camera, onAcknowledge }) {
     <div
       style={{
         padding: "10px 14px",
-        borderBottom: "1px solid var(--border-hairline)",
+        borderBottom: "1px solid var(--border-primary)",
         opacity: alert.status === "acknowledged" ? 0.55 : 1,
         cursor: "pointer",
       }}
@@ -53,11 +53,11 @@ function AlertCard({ alert, camera, onAcknowledge }) {
           >
             {alert.severity}
           </span>
-          <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
             {EVENT_TYPE_LABEL[alert.event_type] || alert.event_type}
           </span>
         </div>
-        <span className="mono" style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+        <span className="mono" style={{ fontSize: 11, color: "var(--text-muted)" }}>
           {timeAgo(alert.triggered_at)}
         </span>
       </div>
@@ -78,7 +78,7 @@ function AlertCard({ alert, camera, onAcknowledge }) {
 
       {/* Row 4: match confidence (if fuzzy match) */}
       {alert.match_confidence != null && alert.match_confidence < 1.0 && (
-        <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 2 }}>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
           Fuzzy match · confidence: {(alert.match_confidence * 100).toFixed(0)}%
         </div>
       )}
@@ -88,7 +88,7 @@ function AlertCard({ alert, camera, onAcknowledge }) {
         <div
           style={{
             marginTop: 8, padding: "8px 10px",
-            background: "var(--bg-void)", borderRadius: 4,
+            background: "var(--bg-primary)", borderRadius: 4,
             fontSize: 12, color: "var(--text-secondary)",
             lineHeight: 1.7,
           }}
@@ -104,7 +104,7 @@ function AlertCard({ alert, camera, onAcknowledge }) {
             <div>
               <strong>Evidence:</strong>{" "}
               <a href={alert.evidence_uri} target="_blank" rel="noreferrer"
-                style={{ color: "var(--accent-active)" }}>
+                style={{ color: "var(--accent-green)" }}>
                 View
               </a>
             </div>
@@ -119,8 +119,8 @@ function AlertCard({ alert, camera, onAcknowledge }) {
           disabled={acking}
           style={{
             marginTop: 8, fontSize: 11, padding: "4px 10px",
-            background: "var(--bg-panel-raised)",
-            border: "1px solid var(--border-hairline)",
+            background: "var(--bg-tertiary)",
+            border: "1px solid var(--border-primary)",
             borderRadius: 4, color: "var(--text-primary)", cursor: "pointer",
           }}
         >
@@ -128,7 +128,7 @@ function AlertCard({ alert, camera, onAcknowledge }) {
         </button>
       )}
       {alert.status === "acknowledged" && (
-        <div style={{ marginTop: 5, fontSize: 11, color: "var(--text-tertiary)" }}>
+        <div style={{ marginTop: 5, fontSize: 11, color: "var(--text-muted)" }}>
           ✓ Acknowledged {alert.acknowledged_at ? new Date(alert.acknowledged_at).toLocaleTimeString() : ""}
         </div>
       )}
@@ -146,7 +146,7 @@ export default function AlertPanel({ alerts = [], onAcknowledge, camerasById = {
       <div
         style={{
           padding: "10px 14px",
-          borderBottom: "1px solid var(--border-hairline)",
+          borderBottom: "1px solid var(--border-primary)",
           display: "flex", justifyContent: "space-between", alignItems: "center",
         }}
       >
@@ -155,7 +155,7 @@ export default function AlertPanel({ alerts = [], onAcknowledge, camerasById = {
           className="mono"
           style={{
             fontSize: 11, fontWeight: 700,
-            color: newCount > 0 ? "var(--severity-critical)" : "var(--text-tertiary)",
+            color: newCount > 0 ? "var(--accent-red)" : "var(--text-muted)",
           }}
         >
           {newCount} new
@@ -165,7 +165,7 @@ export default function AlertPanel({ alerts = [], onAcknowledge, camerasById = {
       {/* Alert list */}
       <div style={{ overflowY: "auto", flex: 1 }}>
         {alertList.length === 0 && (
-          <div style={{ padding: 24, color: "var(--text-tertiary)", fontSize: 13, textAlign: "center" }}>
+          <div style={{ padding: 24, color: "var(--text-muted)", fontSize: 13, textAlign: "center" }}>
             No alerts yet.<br />
             <span style={{ fontSize: 11, lineHeight: 1.6 }}>
               Alerts appear when a detected plate matches the watchlist.

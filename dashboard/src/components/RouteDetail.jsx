@@ -11,8 +11,8 @@
         left: 16,
         width: 320,
         maxHeight: "calc(100% - 32px)",
-        background: "var(--bg-panel)",
-        border: "1px solid var(--border-hairline)",
+        background: "var(--bg-secondary)",
+        border: "1px solid var(--border-primary)",
         borderRadius: 8,
         display: "flex",
         flexDirection: "column",
@@ -23,7 +23,7 @@
       <div
         style={{
           padding: "12px 16px",
-          borderBottom: "1px solid var(--border-hairline)",
+          borderBottom: "1px solid var(--border-primary)",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
@@ -40,7 +40,7 @@
         </div>
         <button
           onClick={onClose}
-          style={{ background: "none", border: "none", color: "var(--text-tertiary)", fontSize: 18, cursor: "pointer" }}
+          style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 18, cursor: "pointer" }}
         >
           ×
         </button>
@@ -48,7 +48,7 @@
 
       <div style={{ overflowY: "auto", padding: "8px 0" }}>
         {stops.length === 0 && (
-          <div style={{ padding: 16, fontSize: 13, color: "var(--text-tertiary)" }}>
+          <div style={{ padding: 16, fontSize: 13, color: "var(--text-muted)" }}>
             No detections recorded for this plate yet.
           </div>
         )}
@@ -62,7 +62,7 @@
                 marginTop: 4,
                 flexShrink: 0,
                 background:
-                  i === 0 ? "var(--accent-active)" : i === stops.length - 1 ? "var(--severity-critical)" : "var(--text-tertiary)",
+                  i === 0 ? "var(--accent-green)" : i === stops.length - 1 ? "var(--accent-red)" : "var(--text-muted)",
               }}
             />
             <div style={{ minWidth: 0 }}>
@@ -70,7 +70,7 @@
               <div className="mono" style={{ fontSize: 11, color: "var(--text-secondary)" }}>
                 {stop.camera_code} {stop.district ? `· ${stop.district}` : ""}
               </div>
-              <div className="mono" style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+              <div className="mono" style={{ fontSize: 11, color: "var(--text-muted)" }}>
                 {stop.timestamp ? new Date(stop.timestamp).toLocaleString() : ""}
               </div>
             </div>
