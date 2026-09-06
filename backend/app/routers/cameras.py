@@ -5,18 +5,23 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, Response
 from geoalchemy2.functions import ST_X, ST_Y, ST_SetSRID, ST_MakePoint
 from sqlalchemy import cast
 from geoalchemy2 import Geometry
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from urllib.parse import quote
+import httpx
 
 from app.database import get_db
 from app.models import Camera, Location, CameraHealth
+from app.models import Camera, Location, CameraHealth, Department
 from app.schemas import CameraCreate, CameraOut, CameraHealthOut, CameraUpdate
 from app.adapters.registry import get_adapter
 from app.core.deps import require_role, get_current_user, get_current_user_or_service, CurrentUser, resolve_department_scope, UNRESTRICTED_ROLES
 from app.core.audit import write_audit_log
+from app.core.config import settings
 
 router = APIRouter(prefix="/cameras", tags=["cameras"])
 
@@ -279,3 +284,296 @@ async def run_health_check(
         error_message=result.error_message,
         checked_at=health_record.checked_at or datetime.now(timezone.utc),
     )
+
+
+# ---------------------------------------------------------------------------
+# Sentinel Dynamic Catalogue & WHEP Signaling Proxy
+# ---------------------------------------------------------------------------
+
+_KNOWN_COORDS = {
+    "cam01": (23.0395, 72.5569), "cam02": (23.0225, 72.5714), "cam03": (23.0262, 72.5762),
+    "cam04": (23.1083, 72.5826), "cam05": (23.0314, 72.5631), "cam06": (23.0359, 72.5560),
+    "cam07": (23.0421, 72.5564), "cam08": (23.0074, 72.5739), "cam09": (22.9953, 72.6019),
+    "cam10": (22.9614, 72.6356), "cam11": (22.9908, 72.4997), "cam12": (23.0498, 72.5076),
+    "cam13": (23.0289, 72.5053), "cam14": (23.0348, 72.4689), "cam15": (23.1058, 72.5934),
+    "cam16": (23.2156, 72.6369), "cam17": (23.2220, 72.6540), "cam18": (21.2010, 72.8450),
+    "cam19": (21.2247, 72.7945), "cam20": (21.1784, 72.8578), "cam21": (22.3189, 73.1765),
+    "cam22": (22.3097, 73.1794), "cam23": (22.3162, 73.1630), "cam24": (22.2920, 70.7796),
+    "cam25": (22.2965, 70.7889), "cam26": (21.7645, 72.1519), "cam27": (22.4673, 70.0577),
+    "cam28": (22.5645, 72.9289), "cam29": (22.6933, 72.8640), "cam30": (23.5879, 72.3693),
+}
+
+
+def _lookup_coords(cam_id: str) -> tuple[float, float]:
+    key = cam_id.replace("SENTINEL-", "").lower()
+    return _KNOWN_COORDS.get(key, (23.0225, 72.5714))
+
+
+def _guess_district(name: str) -> str:
+    n = (name or "").lower()
+    if any(x in n for x in ["ahmedabad", "paldi", "maninagar", "vatva", "navrangpura", "sg highway",
+                              "cg road", "ashram", "relief", "prahladnagar", "bopal", "janpath",
+                              "chiman", "sarkhej", "chandkheda", "sardar patel"]):
+        return "Ahmedabad"
+    if any(x in n for x in ["gandhinagar", "sector"]):
+        return "Gandhinagar"
+    if any(x in n for x in ["surat", "adajan", "udhna"]):
+        return "Surat"
+    if any(x in n for x in ["vadodara", "baroda", "alkapuri", "akota", "rc dutt"]):
+        return "Vadodara"
+    if any(x in n for x in ["rajkot", "kalawad", "ring road"]):
+        return "Rajkot"
+    if any(x in n for x in ["bhavnagar"]):
+        return "Bhavnagar"
+    if any(x in n for x in ["jamnagar"]):
+        return "Jamnagar"
+    if any(x in n for x in ["anand"]):
+        return "Anand"
+    if any(x in n for x in ["nadiad"]):
+        return "Kheda"
+    if any(x in n for x in ["mehsana"]):
+        return "Mehsana"
+    return "Gujarat"
+
+
+async def fetch_sentinel_catalogue_remote() -> list[dict]:
+    cdn = settings.sentinel_cdn.rstrip("/")
+    user = settings.sentinel_username
+    pwd = settings.sentinel_password
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+
+    async with httpx.AsyncClient(headers=headers, timeout=15.0, follow_redirects=True) as client:
+        if user and pwd:
+            try:
+                await client.post(f"{cdn}/auth/login", data={"email": user, "password": pwd})
+            except Exception:
+                pass
+
+        urls = [
+            f"{cdn}/cameras.json",
+            "https://cctv.corp8.cloud/cameras.json",
+            f"http://{settings.sentinel_host}/api/ingest",
+        ]
+        data = None
+        for url in urls:
+            try:
+                r = await client.get(url)
+                if r.status_code == 200:
+                    data = r.json()
+                    break
+            except Exception:
+                continue
+
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            for k in ("cameras", "items", "data", "results", "streams"):
+                if isinstance(data.get(k), list):
+                    return data[k]
+        return []
+
+
+async def sync_catalogue_internal(db: AsyncSession) -> dict:
+    dept_res = await db.execute(select(Department))
+    dept = dept_res.scalars().first()
+    if not dept:
+        dept = Department(
+            name="Gujarat Police",
+            code="GUJ_POL",
+            description="Gujarat Police Home Department — CCTV Command Centre",
+            contact_email="cctv@gujaratpolice.gov.in",
+        )
+        db.add(dept)
+        await db.flush()
+
+    dept_id = dept.id
+    raw_cameras = await fetch_sentinel_catalogue_remote()
+    if not raw_cameras:
+        return {"synced": 0, "message": "No cameras returned by upstream catalogue"}
+
+    cams_res = await db.execute(select(Camera))
+    existing_cams = {c.camera_code: c for c in cams_res.scalars().all()}
+
+    user = settings.sentinel_username
+    pwd = settings.sentinel_password
+
+    synced_count = 0
+    for entry in raw_cameras:
+        cam_id = str(entry.get("id") or entry.get("camera_id") or entry.get("stream_id") or "")
+        if not cam_id:
+            continue
+        code = f"SENTINEL-{cam_id}" if not cam_id.startswith("SENTINEL-") else cam_id
+        short_id = cam_id.replace("SENTINEL-", "").lower()
+        name = entry.get("name") or f"Sentinel Camera {short_id.upper()}"
+
+        if user and pwd:
+            rtsp_url = f"rtsp://{quote(user, safe='')}:{quote(pwd, safe='')}@{settings.sentinel_host}:8554/stream/{short_id}"
+        else:
+            rtsp_url = f"rtsp://{settings.sentinel_host}:8554/stream/{short_id}"
+
+        lat, lng = _lookup_coords(short_id)
+        district = _guess_district(name)
+
+        if code in existing_cams:
+            cam = existing_cams[code]
+            cam.name = name
+            cam.stream_url = rtsp_url
+            cam.status = "active"
+            synced_count += 1
+        else:
+            location = Location(
+                name=name,
+                district=district,
+                geom=ST_SetSRID(ST_MakePoint(lng, lat), 4326),
+            )
+            db.add(location)
+            await db.flush()
+
+            new_cam = Camera(
+                camera_code=code,
+                name=name,
+                department_id=dept_id,
+                location_id=location.id,
+                camera_type="fixed",
+                protocol="rtsp",
+                stream_url=rtsp_url,
+                resolution="1920x1080",
+                fps=25,
+                codec="h264",
+                is_public_domain=True,
+                status="active",
+            )
+            db.add(new_cam)
+            synced_count += 1
+
+    await db.commit()
+    return {"synced": synced_count, "total_catalogue": len(raw_cameras)}
+
+
+@router.post("/sync-catalogue")
+async def sync_catalogue_endpoint(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user_or_service),
+):
+    """Fetches the live cameras.json catalogue and synchronizes the camera database."""
+    result = await sync_catalogue_internal(db)
+    return result
+
+
+@router.get("/catalogue/raw")
+async def get_catalogue_raw():
+    """Returns the live remote catalogue directly without credentials."""
+    cameras = await fetch_sentinel_catalogue_remote()
+    return [
+        {
+            "id": c.get("id"),
+            "name": c.get("name"),
+            "camera_code": f"SENTINEL-{c.get('id')}",
+            "streamPath": f"/stream/{c.get('id')}",
+        }
+        for c in cameras
+        if c.get("id")
+    ]
+
+
+@router.options("/{camera_code}/whep")
+async def whep_options(camera_code: str):
+    return Response(
+        status_code=204,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "OPTIONS, GET, POST, PATCH, DELETE",
+            "Access-Control-Allow-Headers": "Authorization, Content-Type, If-Match",
+            "Access-Control-Expose-Headers": "Accept-Post, Link, Location, ETag, ID",
+            "Accept-Post": "application/sdp",
+        },
+    )
+
+
+@router.post("/{camera_code}/whep")
+async def whep_post(camera_code: str, request: Request):
+    """
+    WHEP signaling proxy: forwards browser SDP offer to upstream MediaMTX with
+    server-side HTTP Basic Auth, returning the SDP answer without exposing credentials.
+    """
+    cam_id = camera_code.replace("SENTINEL-", "").lower()
+    sdp_offer = await request.body()
+    if not sdp_offer:
+        raise HTTPException(status_code=400, detail="SDP offer body required")
+
+    target_url = f"http://{settings.sentinel_host}:8889/stream/{cam_id}/whep"
+    auth = (
+        httpx.BasicAuth(settings.sentinel_username, settings.sentinel_password)
+        if settings.sentinel_username and settings.sentinel_password
+        else None
+    )
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            resp = await client.post(
+                target_url,
+                content=sdp_offer,
+                headers={"Content-Type": "application/sdp"},
+                auth=auth,
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"WHEP signaling failed: {exc}")
+
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=resp.status_code, detail=resp.text)
+
+    out_headers = {
+        "Content-Type": "application/sdp",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Expose-Headers": "Location, Link, Accept-Patch, ETag, ID",
+    }
+    for h in ("location", "accept-patch", "etag", "id", "link"):
+        if h in resp.headers:
+            val = resp.headers[h]
+            if h == "location":
+                session_id = val.rstrip("/").split("/")[-1]
+                val = f"/api/v1/cameras/{camera_code}/whep/{session_id}"
+            out_headers[h.capitalize()] = val
+
+    return Response(content=resp.content, status_code=201, headers=out_headers)
+
+
+@router.patch("/{camera_code}/whep/{session_id:path}")
+async def whep_patch(camera_code: str, session_id: str, request: Request):
+    cam_id = camera_code.replace("SENTINEL-", "").lower()
+    patch_body = await request.body()
+    target_url = f"http://{settings.sentinel_host}:8889/stream/{cam_id}/whep/{session_id}"
+    auth = (
+        httpx.BasicAuth(settings.sentinel_username, settings.sentinel_password)
+        if settings.sentinel_username and settings.sentinel_password
+        else None
+    )
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        try:
+            resp = await client.patch(
+                target_url,
+                content=patch_body,
+                headers={"Content-Type": request.headers.get("content-type", "application/trickle-ice-sdpfrag")},
+                auth=auth,
+            )
+            return Response(status_code=resp.status_code, headers={"Access-Control-Allow-Origin": "*"})
+        except Exception:
+            return Response(status_code=204, headers={"Access-Control-Allow-Origin": "*"})
+
+
+@router.delete("/{camera_code}/whep/{session_id:path}")
+async def whep_delete(camera_code: str, session_id: str):
+    cam_id = camera_code.replace("SENTINEL-", "").lower()
+    target_url = f"http://{settings.sentinel_host}:8889/stream/{cam_id}/whep/{session_id}"
+    auth = (
+        httpx.BasicAuth(settings.sentinel_username, settings.sentinel_password)
+        if settings.sentinel_username and settings.sentinel_password
+        else None
+    )
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        try:
+            resp = await client.delete(target_url, auth=auth)
+            return Response(status_code=resp.status_code, headers={"Access-Control-Allow-Origin": "*"})
+        except Exception:
+            return Response(status_code=200, headers={"Access-Control-Allow-Origin": "*"})
+

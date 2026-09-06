@@ -112,6 +112,39 @@ def fetch_sentinel_catalogue(sentinel_host: str) -> list[dict]:
             print(f"  Unrecognised catalogue shape: {str(resp.text)[:200]}")
         except Exception as e:
             print(f"  Could not reach {url} ({e})")
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    cdn = SENTINEL_CDN.rstrip("/")
+    with httpx.Client(headers=headers, timeout=15.0, follow_redirects=True) as client:
+        if SENTINEL_USERNAME and SENTINEL_PASSWORD:
+            try:
+                login_resp = client.post(
+                    f"{cdn}/auth/login",
+                    data={"email": SENTINEL_USERNAME, "password": SENTINEL_PASSWORD},
+                )
+                print(f"  Auth login to {cdn}: HTTP {login_resp.status_code}")
+            except Exception as e:
+                print(f"  Auth login attempt error: {e}")
+
+        urls = [
+            f"{cdn}/cameras.json",
+            "https://cctv.corp8.cloud/cameras.json",
+            f"http://{sentinel_host}/api/ingest",
+            f"https://{sentinel_host}/api/ingest",
+        ]
+        for url in urls:
+            print(f"  Fetching catalogue from {url} ...")
+            try:
+                resp = client.get(url)
+                print(f"  HTTP {resp.status_code} from {url}")
+                if resp.status_code != 200:
+                    continue
+                cameras = _catalogue_list(resp.json())
+                if cameras:
+                    print(f"  Got {len(cameras)} cameras from Sentinel catalogue.")
+                    return cameras
+                print(f"  Unrecognised catalogue shape: {str(resp.text)[:200]}")
+            except Exception as e:
+                print(f"  Could not reach {url} ({e})")
 
     print("  Using built-in 30-camera fallback list (catalogue unreachable).")
     return [

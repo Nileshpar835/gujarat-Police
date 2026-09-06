@@ -37,6 +37,7 @@ services:
       AI_WORKER_API_KEY: "${AI_WORKER_API_KEY:?set a real key in .env for anything beyond local dev}"
       SENTINEL_HOST: "${SENTINEL_HOST:-103.250.160.189}"
       SENTINEL_USERNAME: "${SENTINEL_USERNAME:-}"
+      SENTINEL_PASSWORD: "${SENTINEL_PASSWORD:-}"
       SENTINEL_CDN: "${SENTINEL_CDN:-https://cctv.corp8.cloud}"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:-admin123}"
     ports:
@@ -53,6 +54,9 @@ services:
     environment:
       BACKEND_BASE_URL: "http://backend:8000/api/v1"
       AI_WORKER_API_KEY: "${AI_WORKER_API_KEY:?set a real key in .env for anything beyond local dev}"
+      SENTINEL_HOST: "${SENTINEL_HOST:-103.250.160.189}"
+      SENTINEL_USERNAME: "${SENTINEL_USERNAME:-}"
+      SENTINEL_PASSWORD: "${SENTINEL_PASSWORD:-}"
       SAMPLE_FPS: "2"
       DETECTION_CONFIDENCE_THRESHOLD: "0.5"
       OCR_CONFIDENCE_THRESHOLD: "0.60"
@@ -68,6 +72,9 @@ services:
       - "8554:8554"   # RTSP (consumed by ai-worker instead of hitting cameras directly, if desired)
       - "8888:8888"   # HLS
       - "8889:8889"   # WebRTC
+      - "8889:8889"   # WebRTC signaling (WHEP)
+      - "8189:8189/udp" # WebRTC media (UDP)
+      - "8189:8189/tcp" # WebRTC media (TCP fallback)
       - "9997:9997"   # control API (internal use by gateway-sync only — do not expose publicly)
     volumes:
       - ./stream-gateway/mediamtx.yml:/mediamtx.yml
@@ -99,6 +106,9 @@ services:
       VITE_SENTINEL_HOST: "${SENTINEL_HOST:-103.250.160.189}"
       VITE_SENTINEL_USERNAME: "${SENTINEL_USERNAME:-}"
       VITE_SENTINEL_PASSWORD: "${SENTINEL_PASSWORD:-}"
+      SENTINEL_HOST: "${SENTINEL_HOST:-103.250.160.189}"
+      SENTINEL_USERNAME: "${SENTINEL_USERNAME:-}"
+      SENTINEL_PASSWORD: "${SENTINEL_PASSWORD:-}"
     ports:
       - "5173:5173"
     volumes:

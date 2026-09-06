@@ -6,6 +6,9 @@ from datetime import datetime, timezone
 
 BACKEND_URL = "http://localhost:8000/api/v1"
 API_KEY = "change_me_to_a_long_random_string"
+import os
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000/api/v1")
+API_KEY = os.getenv("AI_WORKER_API_KEY", "hackathon-local-ai-worker-key")
 
 print("==================================================", flush=True)
 print("Verifying ANPR Detections & Watchlist Alerts Pipeline", flush=True)

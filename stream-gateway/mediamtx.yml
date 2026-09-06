@@ -43,5 +43,8 @@ hlsAlwaysRemux: false
 webrtc: yes
 webrtcAddress: :8889
 webrtcAllowOrigins: ["*"]
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: :8189
+webrtcAdditionalHosts: ["127.0.0.1", "localhost"]
 
 paths: {}

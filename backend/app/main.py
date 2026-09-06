@@ -1,8 +1,27 @@
+from contextlib import asynccontextmanager
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.routers import cameras, departments, watchlist, detections, vehicles, alerts, auth, audit
+
+logger = logging.getLogger("backend-main")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        from app.database import AsyncSessionLocal
+        from app.routers.cameras import sync_catalogue_internal
+        async with AsyncSessionLocal() as db:
+            result = await sync_catalogue_internal(db)
+            logger.info("Startup catalogue sync completed: %s", result)
+    except Exception as exc:
+        logger.warning("Startup catalogue sync skipped/failed: %s", exc)
+    yield
+
 
 app = FastAPI(
     title=settings.app_name,
@@ -11,6 +30,7 @@ app = FastAPI(
         "Registry & GIS foundation (Model 1) + Federation/analytics services "
         "for the Gujarat CCTV Hackathon 2026 platform."
     ),
+    lifespan=lifespan,
 )
 
 # NOTE: for the hackathon demo this is permissive; restrict to the dashboard's
@@ -35,3 +55,9 @@ app.include_router(audit.router, prefix=settings.api_prefix)
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": settings.app_name}
+
+
+@app.get(f"{settings.api_prefix}/health")
+async def api_health():
+    return {"status": "ok", "service": settings.app_name}
+

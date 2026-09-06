@@ -26,5 +26,12 @@ class Settings(BaseSettings):
     # HLD Section 13, "service-to-service authentication".
     ai_worker_api_key: str = "CHANGE_ME_dev_only_ai_worker_key"
 
+    # Sentinel Camera Grid configuration (server-side only)
+    sentinel_host: str = "103.250.160.189"
+    sentinel_username: str = ""
+    sentinel_password: str = ""
+    sentinel_cdn: str = "https://cctv.corp8.cloud"
+
 
 settings = Settings()
+

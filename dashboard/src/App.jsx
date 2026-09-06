@@ -47,6 +47,15 @@ export default function App() {
         getAlerts({ limit: 50 }),
       ]);
       setCameras(camerasData);
+      setCameras((prev) => {
+        if (
+          prev.length === camerasData.length &&
+          prev.every((c, i) => c.id === camerasData[i]?.id && c.status === camerasData[i]?.status)
+        ) {
+          return prev;
+        }
+        return camerasData;
+      });
       setAlerts(alertsData);
       setConnectionError(null);
     } catch (err) {

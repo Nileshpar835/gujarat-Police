@@ -113,6 +113,13 @@ class CameraWorker(threading.Thread):
                     continue
                 last_processed = now
 
+                # Drain stale buffer to process latest frame and avoid queue backlog
+                for _ in range(4):
+                    has_newer, newer_frame = cap.read()
+                    if not has_newer:
+                        break
+                    frame = newer_frame
+
                 # --- PTS-based timing (Sentinel guide: drive from PTS, not arrival time) ---
                 pts_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
                 pts_ok = pts_ms is not None and pts_ms >= 0
