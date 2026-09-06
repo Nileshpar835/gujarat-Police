@@ -1,4 +1,3 @@
-import LiveVideoPlayer from "./LiveVideoPlayer.jsx";
 import React from "react";
 import CameraPlayer from "./CameraPlayer.jsx";
 
@@ -11,7 +10,6 @@ export default function CameraViewerModal({ camera, streamGatewayBaseUrl, onClos
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.6)",
         background: "rgba(0, 0, 0, 0.75)",
         backdropFilter: "blur(4px)",
         display: "flex",
@@ -24,10 +22,6 @@ export default function CameraViewerModal({ camera, streamGatewayBaseUrl, onClos
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: 720,
-          maxWidth: "90vw",
-          background: "var(--bg-panel)",
-          border: "1px solid var(--border-hairline)",
           width: 820,
           maxWidth: "95vw",
           background: "#080c12",
@@ -42,7 +36,6 @@ export default function CameraViewerModal({ camera, streamGatewayBaseUrl, onClos
         <div
           style={{
             padding: "10px 16px",
-            borderBottom: "1px solid var(--border-hairline)",
             borderBottom: "1px solid #1e293b",
             display: "flex",
             justifyContent: "space-between",
@@ -51,19 +44,15 @@ export default function CameraViewerModal({ camera, streamGatewayBaseUrl, onClos
           }}
         >
           <div>
-            <div className="mono" style={{ fontSize: 13, fontWeight: 700 }}>
             <div className="mono" style={{ fontSize: 13, fontWeight: 700, color: "#38bdf8" }}>
               {camera.camera_code}
             </div>
-            <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-              {camera.name} · {camera.district || "—"}
             <div style={{ fontSize: 12, color: "#94a3b8" }}>
               {camera.name} · {camera.district || "Surveillance"}
             </div>
           </div>
           <button
             onClick={onClose}
-            style={{ background: "none", border: "none", color: "var(--text-tertiary)", fontSize: 20 }}
             style={{
               background: "none",
               border: "none",
@@ -76,13 +65,9 @@ export default function CameraViewerModal({ camera, streamGatewayBaseUrl, onClos
             ×
           </button>
         </div>
-        <div style={{ aspectRatio: "16/9" }}>
-          <LiveVideoPlayer cameraCode={camera.camera_code} streamGatewayBaseUrl={streamGatewayBaseUrl} lazy={false} />
-          <LiveVideoPlayer
         <div style={{ aspectRatio: "16/9", position: "relative" }}>
           <CameraPlayer
             camera={camera}
-            cameraCode={camera.camera_code}
             streamGatewayBaseUrl={streamGatewayBaseUrl}
             isFocused={true}
             showDiagnostics={true}
