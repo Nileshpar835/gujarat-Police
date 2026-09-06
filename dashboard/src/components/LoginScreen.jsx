@@ -1,6 +1,6 @@
 ﻿import { useState } from "react";
 import { login } from "../api.js";
-import GujaratPoliceLogo from "./GujaratPoliceLogo.jsx";
+import gujLogo from "../gujlogo.png";
 
 export default function LoginScreen({ onLoginSuccess }) {
   const [username, setUsername] = useState("admin");
@@ -54,7 +54,7 @@ export default function LoginScreen({ onLoginSuccess }) {
       >
         {/* Logo + Department */}
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 24 }}>
-          <GujaratPoliceLogo size={72} style={{ marginBottom: 12 }} />
+          <img src={gujLogo} alt="Gujarat Police" style={{ width: 72, height: 86, marginBottom: 12, borderRadius: 8, objectFit: "contain" }} />
           <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", textAlign: "center" }}>
             Government of Gujarat
           </div>

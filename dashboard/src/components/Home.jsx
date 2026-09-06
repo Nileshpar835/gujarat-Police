@@ -1,6 +1,5 @@
 import { useMemo, useEffect, useState } from "react";
 import CameraPlayer from "./CameraPlayer.jsx";
-import GujaratPoliceLogo from "./GujaratPoliceLogo.jsx";
 import { normalizeCameraId } from "../utils/streamUrlBuilder.js";
 
 function getGreeting() {

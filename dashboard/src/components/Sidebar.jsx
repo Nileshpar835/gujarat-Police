@@ -1,5 +1,5 @@
 import { memo } from "react";
-import GujaratPoliceLogo from "./GujaratPoliceLogo.jsx";
+import gujLogo from "../gujlogo.png";
 
 const NAV_SECTIONS = [
   {
@@ -50,7 +50,7 @@ function Sidebar({ activeTab, onTabChange, currentUser, onLogout, alertCount = 0
           gap: 10,
         }}
       >
-        <GujaratPoliceLogo size={36} />
+        <img src={gujLogo} alt="Gujarat Police" style={{ width: 36, height: 43, borderRadius: 4, objectFit: "contain" }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", lineHeight: 1.2 }}>
             Government of Gujarat <span style={{ color: "var(--accent-cyan)" }}>· Home Department </span>
