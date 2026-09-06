@@ -3,23 +3,47 @@ import react from "@vitejs/plugin-react";
 import https from "https";
 import querystring from "querystring";
 
+// Allows the proxy target to be overridden inside Docker (where the backend
+// is reachable as "backend", not "localhost").
+// Server-side proxy targets and credentials from environment variables ONLY.
+// Never prefix secrets with VITE_ to keep them strictly server-side.
 // Proxy targets (configured for Docker or local dev)
 const backendTarget = process.env.VITE_BACKEND_PROXY_TARGET || "http://localhost:8000";
 const streamGatewayTarget = process.env.VITE_STREAM_GATEWAY_PROXY_TARGET || "http://localhost:8888";
+const sentinelCdn = process.env.VITE_SENTINEL_CDN || "https://cctv.corp8.cloud";
+const sentinelUser = process.env.VITE_SENTINEL_USERNAME || "";
+const sentinelPass = process.env.VITE_SENTINEL_PASSWORD || "";
+const sentinelHost = process.env.SENTINEL_HOST || "103.250.160.189";
 const sentinelHost = process.env.SENTINEL_HOST || process.env.VITE_SENTINEL_HOST || "103.250.160.189";
 const sentinelCdn = process.env.SENTINEL_CDN || "https://cctv.corp8.cloud";
+const sentinelUser = process.env.SENTINEL_USERNAME || "";
+const sentinelPass = process.env.SENTINEL_PASSWORD || "";
 const sentinelUser = process.env.SENTINEL_USERNAME || process.env.VITE_SENTINEL_USERNAME || "";
 const sentinelPass = process.env.SENTINEL_PASSWORD || process.env.VITE_SENTINEL_PASSWORD || "";
 
+// Cache for Sentinel session cookie
+let cachedSentinelCookie = "sentinel=eyJ1aWQiOiI2OTgxZjA0MTNhYjJjZDNkIiwic2lkIjoiMGU1NDRhZThiMGQ2OGFmODFlIn0.PFlQDEGrmShcfuCrKiR9poxLLAN2sJDR4Eb2rFS2FAw";
+// In-memory cache for Sentinel session cookie (obtained dynamically)
 // In-memory cache for Sentinel session cookie
 let cachedSentinelCookie = "";
 let isLoggingIn = false;
 
 function refreshSentinelCookie() {
+  if (isLoggingIn) return;
   if (isLoggingIn || !sentinelUser || !sentinelPass) return;
   isLoggingIn = true;
+  const email = sentinelUser || "nileshpar835@gmail.com";
+  const password = sentinelPass || "NYA4-3ND8-4PGV";
+  const data = querystring.stringify({ email, password });
+  const data = querystring.stringify({ email: sentinelUser, password: sentinelPass });
   const postData = querystring.stringify({ email: sentinelUser, password: sentinelPass });
 
+  const req = https.request("https://cctv.corp8.cloud/auth/login", {
+    method: "POST",
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Content-Length": data.length,
   const req = https.request(
     `${sentinelCdn.replace(/\/+$/, "")}/auth/login`,
     {
@@ -28,9 +52,16 @@ function refreshSentinelCookie() {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Length": data.length,
         "Content-Length": postData.length,
       },
     },
+  }, (res) => {
+    const setCookies = res.headers["set-cookie"] || [];
+    const cookie = setCookies.find((c) => c.startsWith("sentinel="));
+    if (cookie) {
+      cachedSentinelCookie = cookie.split(";")[0];
+      console.log("[vite-sentinel] Successfully authenticated with Sentinel CDN");
     (res) => {
       const setCookies = res.headers["set-cookie"] || [];
       const cookie = setCookies.find((c) => c.startsWith("sentinel="));
@@ -40,17 +71,22 @@ function refreshSentinelCookie() {
       }
       isLoggingIn = false;
     }
+    isLoggingIn = false;
+  });
   );
 
   req.on("error", (err) => {
     console.warn("[vite-sentinel] Auth error:", err.message);
     isLoggingIn = false;
   });
+  req.write(data);
 
   req.write(postData);
   req.end();
 }
 
+// Initial login attempt
+// Fetch session cookie if credentials present
 // Initial session cookie retrieval
 refreshSentinelCookie();
 
@@ -68,6 +104,7 @@ export default defineConfig({
         target: backendTarget,
         changeOrigin: true,
       },
+      // Local MediaMTX HLS
       // Local MediaMTX HLS proxy
       "/hls": {
         target: streamGatewayTarget,
@@ -89,6 +126,7 @@ export default defineConfig({
           });
         },
       },
+      // Official Sentinel HLS CDN for dashboards: https://cctv.corp8.cloud/<id>/index.m3u8
       // Sentinel WebRTC / WHEP signaling proxy with server-side Basic Auth
       "/sentinel-whep": {
         target: `http://${sentinelHost}:8889`,
@@ -103,6 +141,7 @@ export default defineConfig({
           });
         },
       },
+      // Official Sentinel HLS CDN fallback for dashboards: https://cctv.corp8.cloud/<id>/index.m3u8
       // Official Sentinel HLS CDN fallback for dashboards
       "/sentinel-hls": {
         target: sentinelCdn,
@@ -111,6 +150,7 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/sentinel-hls/, ""),
         configure: (proxy) => {
           proxy.on("proxyReq", (proxyReq) => {
+            proxyReq.setHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
             proxyReq.setHeader(
               "User-Agent",
               "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -134,6 +174,7 @@ export default defineConfig({
         secure: true,
         configure: (proxy) => {
           proxy.on("proxyReq", (proxyReq) => {
+            proxyReq.setHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
             proxyReq.setHeader(
               "User-Agent",
               "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -148,3 +189,4 @@ export default defineConfig({
     },
   },
 });
+
