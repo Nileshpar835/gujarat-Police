@@ -60,15 +60,26 @@ a:hover { text-decoration: underline; }
 
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
-::-webkit-scrollbar { width: 6px; height: 6px; }
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #263548; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #374960; }
+::-webkit-scrollbar-thumb { background: #1e2d40; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #2d4055; }
 
+/* Animations */
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes slideInLeft { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes slideInRight { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes slideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
+/* Sliding panel transitions */
+.sliding-panel {
+  transition: width 0.25s cubic-bezier(0.4,0,0.2,1), min-width 0.25s cubic-bezier(0.4,0,0.2,1);
+}
+
+/* Leaflet overrides */
 .leaflet-control-attribution { background: rgba(10,15,26,0.8) !important; color: var(--text-muted) !important; }
 .leaflet-control-attribution a { color: var(--text-secondary) !important; }
 .leaflet-control-zoom a { background: var(--bg-secondary) !important; color: var(--text-primary) !important; border-color: var(--border-primary) !important; }

@@ -3,7 +3,6 @@ import Sidebar from "./components/Sidebar.jsx";
 import MapView from "./components/MapView.jsx";
 import AlertPanel from "./components/AlertPanel.jsx";
 import CameraList from "./components/CameraList.jsx";
-import VehicleSearch from "./components/VehicleSearch.jsx";
 import RouteDetail from "./components/RouteDetail.jsx";
 import CameraViewerModal from "./components/CameraViewerModal.jsx";
 import LoginScreen from "./components/LoginScreen.jsx";
@@ -11,6 +10,7 @@ import WatchlistPanel from "./components/WatchlistPanel.jsx";
 import DetectionHistory from "./components/DetectionHistory.jsx";
 import CameraGrid from "./components/CameraGrid.jsx";
 import Home from "./components/Home.jsx";
+import SlidingPanel from "./components/SlidingPanel.jsx";
 import { getCamerasGis, getAlerts, acknowledgeAlert, getVehicleRoute, getMe } from "./api.js";
 
 const POLL_INTERVAL_MS = 5000;
@@ -30,6 +30,12 @@ export default function App() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState(null);
   const [viewingCamera, setViewingCamera] = useState(null);
+
+  // Panel states
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [leftWidth, setLeftWidth] = useState(240);
+  const [rightWidth, setRightWidth] = useState(300);
 
   const refresh = useCallback(async () => {
     try {
@@ -97,6 +103,7 @@ export default function App() {
       const route = await getVehicleRoute(registrationNumber);
       setActiveRoute(route);
       setActiveTab("map");
+      setLeftCollapsed(true);
     } catch (err) {
       setActiveRoute(null);
       setSearchError(
@@ -105,6 +112,28 @@ export default function App() {
     } finally {
       setSearchLoading(false);
     }
+  };
+
+  const handleAlertRoute = async (plate) => {
+    if (!plate) return;
+    try {
+      const route = await getVehicleRoute(plate);
+      setActiveRoute(route);
+      setActiveTab("map");
+      setLeftCollapsed(true);
+    } catch {
+      // silent
+    }
+  };
+
+  const handleLeftToggle = (action, newWidth) => {
+    if (action === "toggle") setLeftCollapsed((c) => !c);
+    else if (action === "resize") setLeftWidth(newWidth);
+  };
+
+  const handleRightToggle = (action, newWidth) => {
+    if (action === "toggle") setRightCollapsed((c) => !c);
+    else if (action === "resize") setRightWidth(newWidth);
   };
 
   if (!authChecked) {
@@ -117,13 +146,19 @@ export default function App() {
   if (!isAuthenticated) return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
 
   const alertCount = alerts.filter((a) => a.status === "new").length;
+  const criticalAlertCount = alerts.filter((a) => a.status === "new" && a.severity === "critical").length;
 
   return (
     <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
       {/* Sidebar */}
       <Sidebar
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={(tab) => {
+          setActiveTab(tab);
+          if (tab === "map") {
+            setLeftCollapsed(false);
+          }
+        }}
         currentUser={currentUser}
         onLogout={handleLogout}
         alertCount={alertCount}
@@ -228,66 +263,200 @@ export default function App() {
 
         {/* Body */}
         <div style={{ flex: 1, overflow: "hidden" }}>
-          {/* Live Tab */}
+          {/* ============ LIVE TAB ============ */}
           {activeTab === "live" && (
-            <div style={{ height: "100%" }}>
-              <CameraGrid cameras={cameras} streamGatewayBaseUrl={STREAM_GATEWAY_BASE_URL} />
-            </div>
-          )}
-
-          {/* Map Tab */}
-          {activeTab === "map" && (
-            <div style={{ display: "flex", height: "100%" }}>
-              <aside style={{ width: 220, borderRight: "1px solid var(--border-primary)", background: "var(--bg-secondary)", flexShrink: 0 }}>
+            <div style={{ height: "100%", display: "flex" }}>
+              {/* Left: Camera list */}
+              <SlidingPanel
+                side="left"
+                width={leftWidth}
+                collapsed={leftCollapsed}
+                onToggle={handleLeftToggle}
+                header={
+                  <>
+                    <span style={{ fontWeight: 700, fontSize: 12, color: "var(--text-primary)" }}>Cameras</span>
+                    <span className="mono" style={{ fontSize: 10, color: "var(--accent-green)" }}>
+                      {cameras.filter((c) => c.status === "active").length}/{cameras.length}
+                    </span>
+                  </>
+                }
+                badge={alertCount > 0 ? { text: `${alertCount} alert${alertCount === 1 ? "" : "s"}`, color: "var(--accent-red)" } : undefined}
+              >
                 <CameraList cameras={cameras} onSelectCamera={setViewingCamera} />
-              </aside>
-              <main style={{ flex: 1, position: "relative" }}>
-                <MapView cameras={cameras} activeRoute={activeRoute} onCameraClick={setViewingCamera} />
-                <RouteDetail route={activeRoute} onClose={() => setActiveRoute(null)} />
-              </main>
-              <aside style={{ width: 280, borderLeft: "1px solid var(--border-primary)", background: "var(--bg-secondary)", flexShrink: 0 }}>
-                <AlertPanel alerts={alerts} onAcknowledge={handleAcknowledge} camerasById={camerasById} />
-              </aside>
+              </SlidingPanel>
+
+              {/* Center: Camera grid */}
+              <div style={{ flex: 1, overflow: "hidden" }}>
+                <CameraGrid cameras={cameras} streamGatewayBaseUrl={STREAM_GATEWAY_BASE_URL} />
+              </div>
+
+              {/* Right: Alerts */}
+              <SlidingPanel
+                side="right"
+                width={rightWidth}
+                collapsed={rightCollapsed}
+                onToggle={handleRightToggle}
+                header={
+                  <>
+                    <span style={{ fontWeight: 700, fontSize: 12, color: "var(--text-primary)" }}>Live Alerts</span>
+                  </>
+                }
+                badge={alertCount > 0 ? { text: `${alertCount} new`, color: "var(--accent-red)" } : undefined}
+                accent="var(--accent-red)"
+              >
+                <AlertPanel alerts={alerts} onAcknowledge={handleAcknowledge} camerasById={camerasById} onRoute={handleAlertRoute} />
+              </SlidingPanel>
             </div>
           )}
 
-          {/* Incidents/Detections Tab */}
+          {/* ============ MAP TAB ============ */}
+          {activeTab === "map" && (
+            <div style={{ height: "100%", display: "flex", position: "relative" }}>
+              {/* Left: Camera list OR Route detail */}
+              <SlidingPanel
+                side="left"
+                width={leftWidth}
+                collapsed={leftCollapsed}
+                onToggle={handleLeftToggle}
+                header={
+                  <>
+                    <span style={{ fontWeight: 700, fontSize: 12, color: "var(--text-primary)" }}>
+                      {activeRoute ? "Route" : "Cameras"}
+                    </span>
+                    {activeRoute && (
+                      <span className="mono" style={{ fontSize: 10, color: "var(--accent-cyan)" }}>
+                        {activeRoute.registration_number}
+                      </span>
+                    )}
+                    {!activeRoute && (
+                      <span className="mono" style={{ fontSize: 10, color: "var(--accent-green)" }}>
+                        {cameras.filter((c) => c.status === "active").length}/{cameras.length}
+                      </span>
+                    )}
+                  </>
+                }
+                accent={activeRoute ? "var(--accent-cyan)" : undefined}
+              >
+                {activeRoute ? (
+                  <RouteDetail
+                    route={activeRoute}
+                    onClose={() => setActiveRoute(null)}
+                    onCameraClick={setViewingCamera}
+                  />
+                ) : (
+                  <CameraList cameras={cameras} onSelectCamera={setViewingCamera} />
+                )}
+              </SlidingPanel>
+
+              {/* Center: Map */}
+              <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+                <MapView cameras={cameras} activeRoute={activeRoute} onCameraClick={setViewingCamera} />
+              </div>
+
+              {/* Right: Alerts */}
+              <SlidingPanel
+                side="right"
+                width={rightWidth}
+                collapsed={rightCollapsed}
+                onToggle={handleRightToggle}
+                header={
+                  <span style={{ fontWeight: 700, fontSize: 12, color: "var(--text-primary)" }}>Live Alerts</span>
+                }
+                badge={alerts.filter((a) => a.status === "new").length > 0 ? { text: `${alerts.filter((a) => a.status === "new").length} new`, color: "var(--accent-red)" } : undefined}
+                accent="var(--accent-red)"
+              >
+                <AlertPanel alerts={alerts} onAcknowledge={handleAcknowledge} camerasById={camerasById} onRoute={handleAlertRoute} />
+              </SlidingPanel>
+            </div>
+          )}
+
+          {/* ============ INCIDENTS/DETECTIONS TAB ============ */}
           {activeTab === "detections" && (
-            <div style={{ display: "flex", height: "100%" }}>
+            <div style={{ height: "100%", display: "flex" }}>
               <div style={{ flex: 1, overflowY: "auto" }}>
                 <DetectionHistory onShowRoute={(route) => { setActiveRoute(route); setActiveTab("map"); }} />
               </div>
-              <aside style={{ width: 280, borderLeft: "1px solid var(--border-primary)", background: "var(--bg-secondary)", flexShrink: 0 }}>
-                <AlertPanel alerts={alerts} onAcknowledge={handleAcknowledge} camerasById={camerasById} />
-              </aside>
+              <SlidingPanel
+                side="right"
+                width={rightWidth}
+                collapsed={rightCollapsed}
+                onToggle={handleRightToggle}
+                header={
+                  <span style={{ fontWeight: 700, fontSize: 12, color: "var(--text-primary)" }}>Live Alerts</span>
+                }
+                badge={alerts.filter((a) => a.status === "new").length > 0 ? { text: `${alerts.filter((a) => a.status === "new").length} new`, color: "var(--accent-red)" } : undefined}
+                accent="var(--accent-red)"
+              >
+                <AlertPanel alerts={alerts} onAcknowledge={handleAcknowledge} camerasById={camerasById} onRoute={handleAlertRoute} />
+              </SlidingPanel>
             </div>
           )}
 
-          {/* Watchlist Tab */}
+          {/* ============ WATCHLIST TAB ============ */}
           {activeTab === "watchlist" && (
-            <div style={{ display: "flex", height: "100%" }}>
+            <div style={{ height: "100%", display: "flex" }}>
               <div style={{ flex: 1, overflowY: "auto" }}>
                 <WatchlistPanel />
               </div>
-              <aside style={{ width: 280, borderLeft: "1px solid var(--border-primary)", background: "var(--bg-secondary)", flexShrink: 0 }}>
-                <AlertPanel alerts={alerts} onAcknowledge={handleAcknowledge} camerasById={camerasById} />
-              </aside>
+              <SlidingPanel
+                side="right"
+                width={rightWidth}
+                collapsed={rightCollapsed}
+                onToggle={handleRightToggle}
+                header={
+                  <span style={{ fontWeight: 700, fontSize: 12, color: "var(--text-primary)" }}>Live Alerts</span>
+                }
+                badge={alerts.filter((a) => a.status === "new").length > 0 ? { text: `${alerts.filter((a) => a.status === "new").length} new`, color: "var(--accent-red)" } : undefined}
+                accent="var(--accent-red)"
+              >
+                <AlertPanel alerts={alerts} onAcknowledge={handleAcknowledge} camerasById={camerasById} onRoute={handleAlertRoute} />
+              </SlidingPanel>
             </div>
           )}
 
-          {/* Cameras Tab */}
+          {/* ============ CAMERAS TAB ============ */}
           {activeTab === "cameras" && (
             <div style={{ height: "100%", display: "flex" }}>
-              <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
-                <CameraList cameras={cameras} onSelectCamera={setViewingCamera} />
+              <div style={{ flex: 1, overflow: "hidden", display: "flex" }}>
+                <SlidingPanel
+                  side="left"
+                  width={leftWidth}
+                  collapsed={leftCollapsed}
+                  onToggle={handleLeftToggle}
+                  header={
+                    <>
+                      <span style={{ fontWeight: 700, fontSize: 12, color: "var(--text-primary)" }}>All Cameras</span>
+                      <span className="mono" style={{ fontSize: 10, color: "var(--accent-green)" }}>
+                        {cameras.filter((c) => c.status === "active").length}/{cameras.length} online
+                      </span>
+                    </>
+                  }
+                >
+                  <CameraList cameras={cameras} onSelectCamera={setViewingCamera} />
+                </SlidingPanel>
+                <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+                  <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+                    Select a camera from the list to view its live stream.
+                  </div>
+                </div>
               </div>
-              <aside style={{ width: 280, borderLeft: "1px solid var(--border-primary)", background: "var(--bg-secondary)", flexShrink: 0 }}>
-                <AlertPanel alerts={alerts} onAcknowledge={handleAcknowledge} camerasById={camerasById} />
-              </aside>
+              <SlidingPanel
+                side="right"
+                width={rightWidth}
+                collapsed={rightCollapsed}
+                onToggle={handleRightToggle}
+                header={
+                  <span style={{ fontWeight: 700, fontSize: 12, color: "var(--text-primary)" }}>Live Alerts</span>
+                }
+                badge={alerts.filter((a) => a.status === "new").length > 0 ? { text: `${alerts.filter((a) => a.status === "new").length} new`, color: "var(--accent-red)" } : undefined}
+                accent="var(--accent-red)"
+              >
+                <AlertPanel alerts={alerts} onAcknowledge={handleAcknowledge} camerasById={camerasById} onRoute={handleAlertRoute} />
+              </SlidingPanel>
             </div>
           )}
 
-          {/* Home Tab */}
+          {/* ============ HOME TAB ============ */}
           {activeTab === "home" && (
             <Home
               cameras={cameras}
@@ -296,7 +465,7 @@ export default function App() {
             />
           )}
 
-          {/* Audit Tab */}
+          {/* ============ AUDIT TAB ============ */}
           {activeTab === "audit" && (
             <div style={{ padding: 24, color: "var(--text-secondary)" }}>
               <h2 style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)", marginBottom: 12 }}>Audit Log</h2>
