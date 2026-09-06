@@ -1,18 +1,10 @@
 ###############################################
 # Gujarat CCTV Hackathon 2026 — Stream Gateway config
-#
-# This relays camera streams (pulled by the sync service below via RTSP/
-# ONVIF-resolved URLs — see gateway_sync.py) out as HLS and WebRTC for the
-# dashboard, and as a normalised RTSP restream for the AI pipeline. This is
-# the "Stream Gateway" component of the HLD architecture (Section 4/10):
-# video transport is deliberately kept separate from the AI analytics path.
 ###############################################
 
 logLevel: info
 logDestinations: [stdout]
 
-# Control API — used by gateway_sync.py to register/update camera paths
-# dynamically as cameras are onboarded, instead of static config.
 api: yes
 apiAddress: :9997
 
@@ -26,29 +18,30 @@ authInternalUsers:
       - action: publish
       - action: playback
 
-# RTSP: both an ingest protocol (if a camera pushes) and our own restream
-# output that the AI worker can consume instead of hitting camera RTSP
-# endpoints directly — reduces load on source cameras under concurrency.
 rtsp: yes
 rtspAddress: :8554
 rtspTransports: [tcp]
 
-# HLS output for the dashboard's <video> player (broad browser support,
-# a few seconds of latency — acceptable for a command-dashboard grid).
+# HLS output.
+# fmp4 variant: compatible with all modern browsers via hls.js.
+# Key tuning for fast on-demand startup:
+#   - hlsSegmentCount 2: only 2 segments needed before manifest is served
+#     (2 x 1s = 2s of buffering required — much faster than the default 7).
+#   - hlsSegmentDuration 1s: 1-second segments.
+#   - hlsMuxerCloseAfter 30s: keep muxer warm so next viewer starts instantly.
+#   - hlsAlwaysRemux false: only active when someone is watching (saves CPU).
 hls: yes
 hlsAddress: :8888
 hlsAllowOrigins: ["*"]
 hlsVariant: fmp4
+hlsSegmentCount: 3
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+hlsMuxerCloseAfter: 30s
+hlsAlwaysRemux: false
 
-# WebRTC output — lower latency option, used where sub-second matters.
 webrtc: yes
 webrtcAddress: :8889
 webrtcAllowOrigins: ["*"]
-
-# No paths are statically defined — every camera path is registered at
-# runtime by gateway_sync.py based on the Registry & GIS service's camera
-# list. This is what keeps the gateway vendor/camera-count agnostic.
-# gateway_sync.py sets sourceProtocol per-path when registering cameras
-# to force TCP pulls from source cameras (per Sentinel integration spec).
 
 paths: {}

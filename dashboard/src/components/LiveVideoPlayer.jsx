@@ -2,25 +2,27 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import Hls from "hls.js";
 
 /**
- * LiveVideoPlayer: High-performance, lazy-loading HLS video player.
+ * LiveVideoPlayer: High-performance, resilient HLS video player.
  *
- * Features:
- *   - Lazy Loading: Only connects when scrolled into view (IntersectionObserver)
- *   - Staggered Scheduling: Jitters stream starts so multiple grid cameras do not
- *     saturate gateway connections concurrently
- *   - On-Demand Gateway Sync: Polite retries give MediaMTX time to pull RTSP keyframes
- *   - Dual-Source Fallback: Sentinel CDN HLS (dashboards) -> local MediaMTX RTSP relay
+ * Architecture:
+ *   1. Primary: Official Sentinel CDN (/sentinel-hls/<camId>/index.m3u8)
+ *      - Hosted on Cloudflare edge: pre-buffered, pre-muxed, instant (~0.5s) delivery.
+ *      - Authenticated automatically via Vite proxy with cached session cookie
+ *        and AES-128 (/enc.key) decryption key support.
+ *   2. Secondary: Local MediaMTX Relay (/hls/<cameraCode>/index.m3u8)
+ *      - Local Docker network fallback if CDN ever experiences rate limiting.
+ *   3. Concurrency Protection:
+ *      - Strict IntersectionObserver detaches HLS decoders when scrolled away,
+ *        releasing browser network sockets immediately.
  */
-
-const SENTINEL_CDN_ORIGIN = "https://cctv.corp8.cloud";
 
 function buildSources(cameraCode, gatewayBase) {
   const camId = cameraCode.replace(/^SENTINEL-/i, "");
   return [
-    // 1st: Local MediaMTX relay — low latency, on-demand, same network
-    `${gatewayBase}/${cameraCode}/index.m3u8`,
-    // 2nd: Sentinel CDN — requires active browser session cookie (auth)
+    // 1st: Sentinel CDN (fastest: ~0.5s playback, pre-buffered at edge)
     `/sentinel-hls/${camId}/index.m3u8`,
+    // 2nd: Local MediaMTX relay (fallback)
+    `${gatewayBase}/${cameraCode}/index.m3u8`,
   ];
 }
 
@@ -33,14 +35,17 @@ export default function LiveVideoPlayer({
   const containerRef = useRef(null);
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
+  const retryTimerRef = useRef(null);
+  const warmupCountRef = useRef(0);
 
   const [isVisible, setIsVisible] = useState(!lazy);
-  const [status, setStatus] = useState("idle"); // idle | queued | connecting | live | error
+  const [status, setStatus] = useState("idle"); // idle | queued | connecting | live | retrying | error
   const [sourceIdx, setSourceIdx] = useState(0);
   const [retryKey, setRetryKey] = useState(0);
   const [pausedManually, setPausedManually] = useState(false);
+  const [errorDetails, setErrorDetails] = useState(null);
 
-  // 1. Viewport Lazy-Loading with IntersectionObserver
+  // 1. Viewport Lazy-Loading with strict threshold
   useEffect(() => {
     if (!lazy) {
       setIsVisible(true);
@@ -55,12 +60,12 @@ export default function LiveVideoPlayer({
           if (entry.isIntersecting) {
             setIsVisible(true);
           } else {
-            // Detach stream if scrolled far away to free decoder memory & gateway bandwidth
+            // Cleanly detach stream when off-screen to free browser sockets
             setIsVisible(false);
           }
         });
       },
-      { rootMargin: "150px 0px", threshold: 0.05 }
+      { rootMargin: "60px 0px", threshold: 0.05 }
     );
 
     observer.observe(elem);
@@ -68,6 +73,10 @@ export default function LiveVideoPlayer({
   }, [lazy]);
 
   const destroyHls = useCallback(() => {
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
     if (hlsRef.current) {
       try {
         hlsRef.current.destroy();
@@ -78,7 +87,7 @@ export default function LiveVideoPlayer({
     }
   }, []);
 
-  // 2. Stream lifecycle (staggered connect, on-demand pull & fallback)
+  // 2. Stream lifecycle (instant connect & fallback)
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !cameraCode || !isVisible || pausedManually) {
@@ -89,12 +98,14 @@ export default function LiveVideoPlayer({
 
     destroyHls();
     setStatus("queued");
+    warmupCountRef.current = 0;
 
-    // Stagger start: each slot waits (index * 150ms) to avoid simultaneous network stampede
-    const startDelay = Math.min((staggerIndex % 16) * 150, 2400);
+    // Small jitter (0 to 300ms) to spread initial microtask execution
+    const startDelay = Math.min((staggerIndex % 8) * 40, 320);
 
     const timer = setTimeout(() => {
       setStatus("connecting");
+      setErrorDetails(null);
 
       const sources = buildSources(cameraCode, streamGatewayBaseUrl);
       const src = sources[sourceIdx];
@@ -105,15 +116,20 @@ export default function LiveVideoPlayer({
 
       if (Hls.isSupported()) {
         const hls = new Hls({
-          lowLatencyMode: true,
-          // MediaMTX sourceOnDemand needs 2-4s to dial RTSP and package the 1st HLS fragment
-          manifestLoadingTimeOut: 5000,
-          manifestLoadingMaxRetry: 8,
-          manifestLoadingRetryDelay: 1500,
+          lowLatencyMode: false,
+          manifestLoadingTimeOut: 6000,
+          manifestLoadingMaxRetry: 4,
+          manifestLoadingRetryDelay: 800,
           levelLoadingTimeOut: 6000,
+          levelLoadingMaxRetry: 4,
+          levelLoadingRetryDelay: 600,
           fragLoadingTimeOut: 8000,
-          liveSyncDurationCount: 2,
-          liveMaxLatencyDurationCount: 6,
+          fragLoadingMaxRetry: 4,
+          liveSyncDurationCount: 3,
+          liveMaxLatencyDurationCount: 10,
+          liveDurationInfinity: true,
+          maxBufferLength: 8,
+          maxMaxBufferLength: 16,
           xhrSetup: (xhr) => {
             xhr.withCredentials = true;
           },
@@ -125,6 +141,7 @@ export default function LiveVideoPlayer({
 
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           setStatus("live");
+          warmupCountRef.current = 0;
           video.play().catch(() => {
             // Autoplay policy prevented playback until user interaction
           });
@@ -133,23 +150,43 @@ export default function LiveVideoPlayer({
         hls.on(Hls.Events.ERROR, (_evt, data) => {
           if (!data.fatal) return;
 
-          // If MediaMTX cannot connect or is unavailable, try CDN fallback
-          const nextIdx = sourceIdx + 1;
-          if (nextIdx < sources.length) {
+          // If on MediaMTX fallback and getting on-demand warmup 500
+          const is500Error = data.response && data.response.code === 500;
+          if (sourceIdx === 1 && is500Error && warmupCountRef.current < 4) {
+            warmupCountRef.current += 1;
+            setStatus("connecting");
+            retryTimerRef.current = setTimeout(() => {
+              if (hlsRef.current && !pausedManually && isVisible) {
+                hlsRef.current.loadSource(src);
+                hlsRef.current.startLoad();
+              }
+            }, 1000);
+            return;
+          }
+
+          // Try next source
+          const nextSrcIdx = sourceIdx + 1;
+          if (nextSrcIdx < sources.length) {
             destroyHls();
-            setSourceIdx(nextIdx);
+            setSourceIdx(nextSrcIdx);
+            setStatus("connecting");
           } else {
-            setStatus("error");
             destroyHls();
+            setStatus("error");
+            setErrorDetails(data.details || "Stream unavailable");
           }
         });
       } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        // Native Safari HLS
         video.src = src;
         video.addEventListener("loadedmetadata", () => setStatus("live"), { once: true });
         video.addEventListener("error", () => {
-          const nextIdx = sourceIdx + 1;
-          if (nextIdx < sources.length) setSourceIdx(nextIdx);
-          else setStatus("error");
+          const nextSrcIdx = sourceIdx + 1;
+          if (nextSrcIdx < sources.length) {
+            setSourceIdx(nextSrcIdx);
+          } else {
+            setStatus("error");
+          }
         }, { once: true });
       } else {
         setStatus("error");
@@ -164,6 +201,8 @@ export default function LiveVideoPlayer({
 
   const handleRetry = (e) => {
     if (e) e.stopPropagation();
+    destroyHls();
+    warmupCountRef.current = 0;
     setPausedManually(false);
     setSourceIdx(0);
     setRetryKey((k) => k + 1);
@@ -238,9 +277,9 @@ export default function LiveVideoPlayer({
 
           {status === "queued" && (
             <>
-              <div style={{ fontSize: 18, opacity: 0.7 }}>⏳</div>
-              <div style={{ fontSize: 11, color: "#5c6b86" }}>Scheduled connect…</div>
-              <div className="mono" style={{ fontSize: 10, color: "#3a4a5c" }}>{cameraCode}</div>
+              <div style={{ fontSize: 16, opacity: 0.7 }}>⏳</div>
+              <div style={{ fontSize: 10, color: "#5c6b86" }}>Loading feed…</div>
+              <div className="mono" style={{ fontSize: 9, color: "#3a4a5c" }}>{cameraCode}</div>
             </>
           )}
 
@@ -248,26 +287,26 @@ export default function LiveVideoPlayer({
             <>
               <div
                 style={{
-                  width: 28,
-                  height: 28,
+                  width: 24,
+                  height: 24,
                   borderRadius: "50%",
                   border: "2px solid #1a3a5c",
                   borderTop: "2px solid #3dd6c4",
-                  animation: "lvp-spin 0.9s linear infinite",
+                  animation: "lvp-spin 0.8s linear infinite",
                 }}
               />
-              <div style={{ fontSize: 11, color: "#5c6b86" }}>
-                {sourceIdx === 0 ? "Connecting on-demand…" : "Connecting Sentinel CDN…"}
+              <div style={{ fontSize: 10, color: "#5c6b86" }}>
+                Connecting feed…
               </div>
-              <div className="mono" style={{ fontSize: 10, color: "#3a4a5c" }}>{cameraCode}</div>
+              <div className="mono" style={{ fontSize: 9, color: "#3a4a5c" }}>{cameraCode}</div>
             </>
           )}
 
           {status === "error" && (
             <>
-              <div style={{ fontSize: 20 }}>📷</div>
-              <div style={{ fontSize: 11, color: "#ef4444", textAlign: "center" }}>
-                Stream unavailable
+              <div style={{ fontSize: 18 }}>📷</div>
+              <div style={{ fontSize: 10, color: "#ef4444", textAlign: "center" }}>
+                Feed unavailable
               </div>
               <div className="mono" style={{ fontSize: 9, color: "#5c6b86", textAlign: "center" }}>
                 {cameraCode}
@@ -275,9 +314,9 @@ export default function LiveVideoPlayer({
               <button
                 onClick={handleRetry}
                 style={{
-                  marginTop: 4,
+                  marginTop: 2,
                   fontSize: 10,
-                  padding: "3px 12px",
+                  padding: "2px 10px",
                   background: "#1a2a3a",
                   border: "1px solid #2d4060",
                   borderRadius: 4,
@@ -299,7 +338,7 @@ export default function LiveVideoPlayer({
             position: "absolute",
             top: 6,
             left: 6,
-            background: "rgba(10,14,20,0.8)",
+            background: "rgba(10,14,20,0.85)",
             borderRadius: 4,
             padding: "2px 7px",
             display: "flex",
@@ -337,20 +376,6 @@ export default function LiveVideoPlayer({
           zIndex: 2,
         }}
       >
-        {sourceIdx > 0 && status === "live" && (
-          <div
-            style={{
-              background: "rgba(30, 20, 50, 0.8)",
-              border: "1px solid #8b5cf6",
-              borderRadius: 3,
-              padding: "1px 5px",
-              fontSize: 9,
-              color: "#c4b5fd",
-            }}
-          >
-            CDN
-          </div>
-        )}
         {status === "live" && (
           <button
             onClick={togglePause}

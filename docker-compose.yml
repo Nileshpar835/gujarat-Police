@@ -69,6 +69,8 @@ services:
       - "8888:8888"   # HLS
       - "8889:8889"   # WebRTC
       - "9997:9997"   # control API (internal use by gateway-sync only — do not expose publicly)
+    volumes:
+      - ./stream-gateway/mediamtx.yml:/mediamtx.yml
 
   gateway-sync:
     build:

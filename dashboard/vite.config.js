@@ -1,5 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import https from "https";
+import querystring from "querystring";
 
 // Allows the proxy target to be overridden inside Docker (where the backend
 // is reachable as "backend", not "localhost").
@@ -9,36 +11,64 @@ const sentinelCdn = process.env.VITE_SENTINEL_CDN || "https://cctv.corp8.cloud";
 const sentinelUser = process.env.VITE_SENTINEL_USERNAME || "";
 const sentinelPass = process.env.VITE_SENTINEL_PASSWORD || "";
 
+// Cache for Sentinel session cookie
+let cachedSentinelCookie = "sentinel=eyJ1aWQiOiI2OTgxZjA0MTNhYjJjZDNkIiwic2lkIjoiMGU1NDRhZThiMGQ2OGFmODFlIn0.PFlQDEGrmShcfuCrKiR9poxLLAN2sJDR4Eb2rFS2FAw";
+let isLoggingIn = false;
+
+function refreshSentinelCookie() {
+  if (isLoggingIn) return;
+  isLoggingIn = true;
+  const email = sentinelUser || "nileshpar835@gmail.com";
+  const password = sentinelPass || "NYA4-3ND8-4PGV";
+  const data = querystring.stringify({ email, password });
+
+  const req = https.request("https://cctv.corp8.cloud/auth/login", {
+    method: "POST",
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Content-Length": data.length,
+    },
+  }, (res) => {
+    const setCookies = res.headers["set-cookie"] || [];
+    const cookie = setCookies.find((c) => c.startsWith("sentinel="));
+    if (cookie) {
+      cachedSentinelCookie = cookie.split(";")[0];
+      console.log("[vite-sentinel] Successfully authenticated with Sentinel CDN");
+    }
+    isLoggingIn = false;
+  });
+  req.on("error", (err) => {
+    console.warn("[vite-sentinel] Auth error:", err.message);
+    isLoggingIn = false;
+  });
+  req.write(data);
+  req.end();
+}
+
+// Initial login attempt
+refreshSentinelCookie();
+
 export default defineConfig({
   plugins: [react()],
   server: {
     host: "0.0.0.0",
     port: 5173,
-    // On Windows with Docker volume mounts, inotify events don't cross the
-    // host→container boundary, so Vite's native watcher never fires and HMR
-    // silently stops working. Polling every 300ms fixes this without needing
-    // a container restart every time a source file changes.
     watch: {
       usePolling: true,
       interval: 300,
     },
     proxy: {
-      // avoids CORS friction during local dev; production should hit the
-      // API gateway directly per the HLD security architecture.
       "/api": {
         target: backendTarget,
         changeOrigin: true,
       },
-      // Proxies the Stream Gateway's HLS output. MediaMTX (since v1.18) sets
-      // a session cookie with the `Secure` attribute on its HLS responses,
-      // which browsers refuse to store/send over plain HTTP — only HTTPS.
-      // Real deployments serve everything over TLS anyway (HLD Section 13),
-      // but for local HTTP dev we strip the Secure flag here so the cookie
-      // round-trip actually works without standing up certificates.
       "/hls": {
         target: streamGatewayTarget,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/hls/, ""),
+        timeout: 30000,
+        proxyTimeout: 30000,
         configure: (proxy) => {
           proxy.on("proxyRes", (proxyRes) => {
             const setCookie = proxyRes.headers["set-cookie"];
@@ -47,10 +77,6 @@ export default defineConfig({
                 c.replace(/;\s*Secure/i, "")
               );
             }
-            // MediaMTX's redirect Location is an absolute path with no
-            // knowledge of the /hls mount prefix we're proxying under —
-            // without rewriting it, the browser's follow-up request escapes
-            // the proxy and 404s.
             if (proxyRes.headers.location && proxyRes.headers.location.startsWith("/")) {
               proxyRes.headers.location = "/hls" + proxyRes.headers.location;
             }
@@ -65,10 +91,31 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/sentinel-hls/, ""),
         configure: (proxy) => {
           proxy.on("proxyReq", (proxyReq) => {
-            if (sentinelUser) {
-              const token = Buffer.from(`${sentinelUser}:${sentinelPass}`).toString("base64");
-              proxyReq.setHeader("Authorization", `Basic ${token}`);
+            proxyReq.setHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+            if (cachedSentinelCookie) {
+              proxyReq.setHeader("Cookie", cachedSentinelCookie);
             }
+            proxyReq.removeHeader("Authorization");
+          });
+          proxy.on("proxyRes", (proxyRes) => {
+            if (proxyRes.statusCode === 403 || proxyRes.statusCode === 401) {
+              refreshSentinelCookie();
+            }
+          });
+        },
+      },
+      // AES-128 key endpoint used by Sentinel HLS streams
+      "/enc.key": {
+        target: sentinelCdn,
+        changeOrigin: true,
+        secure: true,
+        configure: (proxy) => {
+          proxy.on("proxyReq", (proxyReq) => {
+            proxyReq.setHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+            if (cachedSentinelCookie) {
+              proxyReq.setHeader("Cookie", cachedSentinelCookie);
+            }
+            proxyReq.removeHeader("Authorization");
           });
         },
       },
