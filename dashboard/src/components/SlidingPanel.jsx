@@ -124,7 +124,7 @@ export default function SlidingPanel({
             e.currentTarget.style.borderColor = "transparent";
           }}
         >
-          {collapsed ? (isLeft ? "»" : "«") : (isLeft ? "«" : "»")}
+          {collapsed ? (isLeft ? "»👉" : "«") : (isLeft ? "«👉" : "»")}
         </button>
       </div>
 
